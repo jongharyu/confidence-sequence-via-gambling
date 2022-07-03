@@ -135,7 +135,7 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
         self.n = n
         self.use_cython = use_cython
 
-        # for piggybacking UP
+        # for piggybacking UP (these are used in HybridUP)
         self.tup = tup
         self.betas = betas
         self.logweights = logweights
@@ -169,13 +169,13 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
         for t in range(self.tup + 1, len(xs) + 1):
             mu_hat = sums[t - 1, 1] / sums[t - 1, 0]
 
-            # using scipy's fsolve (somehow doesn't work properly)
+            # use scipy's fsolve (somehow doesn't work properly)
             # lower_ci[t - 1] = self.find_root_fsolve(sums[t - 1], sums_c[t - 1],
             #                                         xinit=(lower_ci[t - 2] + mu_hat) / 2)
             # upper_ci[t - 1] = self.find_root_fsolve(sums[t - 1], sums_c[t - 1],
             #                                         xinit=(upper_ci[t - 2] + mu_hat) / 2)
 
-            # homemade bisect
+            # use scipy's bisect with a customized initialization rule
             xinit_low = lower_ci[t - 2] if t > 1 else eps
             if self.f(xinit_low, sums[t - 1], sums_c[t - 1]) < np.log(1 / self.delta):
                 lower_ci[t - 1] = lower_ci[t - 2]
