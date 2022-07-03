@@ -65,60 +65,60 @@ class TruncatedGamma:
 
 class TruncatedGammaParams:
     # Define rho1 and eta1 with Y^t
-    # rho2 and eta2 are defined symmetrically by replacing {Y^t, mu} with {(1-Y^t), (1-mu)}
+    # rho2 and eta2 are defined symmetrically by replacing {Y^t, m} with {(1-Y^t), (1-m)}
     def __init__(self, n, use_cython=True):
         self.n = n
         self.use_cython = use_cython
 
     @staticmethod
-    def g(mu, k, sums):
-        log_even = logsumexp([logbinom(k, j) + np.log(sums[j]) - j * np.log(mu) for j in range(0, k + 1, 2)])
-        log_odd = logsumexp([logbinom(k, j) + np.log(sums[j]) - j * np.log(mu) for j in range(1, k + 1, 2)])
+    def g(m, k, sums):
+        log_even = logsumexp([logbinom(k, j) + np.log(sums[j]) - j * np.log(m) for j in range(0, k + 1, 2)])
+        log_odd = logsumexp([logbinom(k, j) + np.log(sums[j]) - j * np.log(m) for j in range(1, k + 1, 2)])
         return np.exp(log_even) - np.exp(log_odd)
-    #         return np.sum([binom(k, j) * sums[j] / ((-mu) ** j) for j in range(k + 1)])
+    #         return np.sum([binom(k, j) * sums[j] / ((-m) ** j) for j in range(k + 1)])
 
-    def compute_params(self, mu, sums):
+    def compute_params(self, m, sums):
         assert len(sums) == 2 * self.n + 1, (len(sums), self.n)
-        eta = self.g(mu, 2 * self.n, sums)
-        rhos = eta - np.array([self.g(mu, k, sums) for k in range(1, 2 * self.n)])
+        eta = self.g(m, 2 * self.n, sums)
+        rhos = eta - np.array([self.g(m, k, sums) for k in range(1, 2 * self.n)])
         return rhos, eta
 
-    def compute_log_z(self, mu, sums):
-        rhos, eta = self.compute_params(mu, sums)
+    def compute_log_z(self, m, sums):
+        rhos, eta = self.compute_params(m, sums)
         base_log_z = TruncatedGamma(rhos, eta, use_cython=self.use_cython).log_z
-        #         print("Debugging", (np.log(1 - mu), base_log_z))
-        return np.log(1 - mu) + base_log_z
+        #         print("Debugging", (np.log(1 - m), base_log_z))
+        return np.log(1 - m) + base_log_z
 
 
 class StitchedTruncatedGamma:
-    def __init__(self, mu, rhos1, eta1, rhos2, eta2, use_cython=True):
-        self.gtg1 = TruncatedGamma(rhos1, eta1, use_cython=use_cython)
-        self.gtg2 = TruncatedGamma(rhos2, eta2, use_cython=use_cython)
-        self.mu = mu
+    def __init__(self, m, rhos1, eta1, rhos2, eta2, use_cython=True):
+        self.tg1 = TruncatedGamma(rhos1, eta1, use_cython=use_cython)
+        self.tg2 = TruncatedGamma(rhos2, eta2, use_cython=use_cython)
+        self.m = m
 
     def log_phi(self, b):
         assert 0 <= b <= 1
-        if 0 <= b <= self.mu:
-            return self.gtg2.log_phi(b / self.mu)
+        if 0 <= b <= self.m:
+            return self.tg2.log_phi(b / self.m)
         else:
-            return self.gtg1.log_phi((1 - b) / (1 - self.mu))
+            return self.tg1.log_phi((1 - b) / (1 - self.m))
 
     @property
     def log_z(self):
-        log_z2 = self.gtg2.log_z
-        log_z1 = self.gtg1.log_z
-        print((np.log(self.mu), log_z2), (np.log(1 - self.mu), log_z1))
-        return logsumexp([log_z2 + np.log(self.mu),
-                          log_z1 + np.log(1 - self.mu)])
+        log_z2 = self.tg2.log_z
+        log_z1 = self.tg1.log_z
+        print((np.log(self.m), log_z2), (np.log(1 - self.m), log_z1))
+        return logsumexp([log_z2 + np.log(self.m),
+                          log_z1 + np.log(1 - self.m)])
 
 
 class StitchedTruncatedGammaParams:
     def __init__(self, n):
-        self.gtg_params = TruncatedGammaParams(n)
+        self.tg_params = TruncatedGammaParams(n)
 
-    def compute_log_z(self, mu, sums, sums_c):
-        log_z1 = self.gtg_params.compute_log_z(mu, sums)
-        log_z2 = self.gtg_params.compute_log_z(1 - mu, sums_c)
+    def compute_log_z(self, m, sums, sums_c):
+        log_z1 = self.tg_params.compute_log_z(m, sums)
+        log_z2 = self.tg_params.compute_log_z(1 - m, sums_c)
         if log_z1 == -np.inf:
             return log_z2
         elif log_z2 == -np.inf:
@@ -129,26 +129,33 @@ class StitchedTruncatedGammaParams:
 
 class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
     def __init__(self, delta, n,
+                 sums0=0, sums_c0=0,
                  tup=0, betas=(1 / 2, 1 / 2), logweights=None,
                  use_cython=True):
         super().__init__(delta)
         self.n = n
         self.use_cython = use_cython
+        self.tg_params = TruncatedGammaParams(self.n, self.use_cython)
+
+        # for rhos and eta for a prior
+        self.sums0 = sums0 if not isinstance(sums0, int) else np.zeros(2 * self.n + 1)
+        self.sums_c0 = sums_c0 if not isinstance(sums_c0, int) else np.zeros(2 * self.n + 1)
 
         # for piggybacking UP (these are used in HybridUP)
         self.tup = tup
         self.betas = betas
         self.logweights = logweights
 
-    def f(self, mu, sums, sums_c, t=0, verbose=False):
-        # f(mu, st, sst) = log((Z1t + Z2t) / (Z10 + Z20))
-        log_numer = logsumexp([TruncatedGammaParams(self.n, self.use_cython).compute_log_z(mu, sums),
-                               TruncatedGammaParams(self.n, self.use_cython).compute_log_z(1 - mu, sums_c)])
-        log_denom = 0
+    def f(self, m, sums, sums_c, verbose=False):
+        # f(m, st, sst) = log((Z1t + Z2t) / (Z10 + Z20))
+        log_numer = logsumexp([self.tg_params.compute_log_z(m, sums + self.sums0),
+                               self.tg_params.compute_log_z(1 - m, sums_c + self.sums_c0)])
+        log_denom = logsumexp([self.tg_params.compute_log_z(m, self.sums0),
+                               self.tg_params.compute_log_z(1 - m, self.sums_c0)])
         val = log_numer - log_denom
 
-        if t > self.tup and self.logweights is not None:
-            val += UniversalPortfolioCI(self.delta, betas=self.betas).f(mu, self.tup, self.logweights)
+        if self.logweights is not None:
+            val += UniversalPortfolioCI(self.delta, betas=self.betas).f(m, self.tup, self.logweights)
 
         return np.nan_to_num(val, nan=np.inf)
 
@@ -160,13 +167,12 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
         lower_ci = np.zeros_like(xs).astype(float)
         upper_ci = np.ones_like(xs).astype(float)
 
-        xs = xs[:, np.newaxis]
-        sums = np.hstack([(xs ** k) for k in range(2 * self.n + 1)]).cumsum(axis=0)
-        sums_c = np.hstack([((1 - xs) ** k) for k in range(2 * self.n + 1)]).cumsum(axis=0)
+        sums = np.stack([(xs ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
+        sums_c = np.stack([((1 - xs) ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
 
         telapsed = []
         start = time.time()
-        for t in range(self.tup + 1, len(xs) + 1):
+        for t in range(1, len(xs) + 1):
             mu_hat = sums[t - 1, 1] / sums[t - 1, 0]
 
             # use scipy's fsolve (somehow doesn't work properly)
@@ -198,35 +204,33 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
                     print("bisect encounters ValueError!")
                     upper_ci[t - 1] = upper_ci[t - 2]
 
-            if t % log_every == 0:
+            if (t + self.tup) % log_every == 0:
                 end = time.time()
                 telapsed.append(end - start)
-                if verbose:
-                    print(t, end=' ')
+                print(t, end=' ')
                 start = end
 
-        return lower_ci[self.tup:], upper_ci[self.tup:], telapsed
+        return lower_ci, upper_ci, telapsed
 
     def plot(self, xs, every=10, ax=None, legend=False, **kwargs):
         if ax is None:
             fig, ax = plt.subplots(ncols=1, nrows=1)
-        mus = np.arange(0.01, 1, 0.01)
+        ms = np.arange(0.01, 1, 0.01)
 
-        xs = xs[:, np.newaxis]
-        sums = np.hstack([(xs ** k) for k in range(2 * self.n + 1)]).cumsum(axis=0)
-        sums_c = np.hstack([((1 - xs) ** k) for k in range(2 * self.n + 1)]).cumsum(axis=0)
+        sums = np.stack([(xs ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
+        sums_c = np.stack([((1 - xs) ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
 
         fs = []
         for t in range(1, len(xs) + 1):
-            if t % every == 0:
-                print(t)
-                fs = np.zeros_like(mus)
-                for i, mu in enumerate(mus):
-                    fs[i] = self.f(mu, sums[t - 1], sums_c[t - 1], t=0)
+            if (t + self.tup) % every == 0:
+                print(t + self.tup)
+                fs = np.zeros_like(ms)
+                for i, m in enumerate(ms):
+                    fs[i] = self.f(m, sums[t - 1], sums_c[t - 1])
                 if 'label' not in kwargs:
                     kwargs['label'] = 'LBUP'
                 kwargs['label'] += ' (order={}; t={})'.format(self.n, t)
-                ax.plot(mus, fs, **kwargs)
+                ax.plot(ms, fs, **kwargs)
                 ax.axhline(np.log(1 / self.delta), linestyle='--')
                 if legend:
                     ax.legend()
