@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import bisect, fsolve
@@ -76,6 +78,8 @@ class ConfidenceSeqeunce:
             return np.sign(f1) != np.sign(f2)
 
         xlow, xhi = xinits
+        assert xlow < xhi, (xlow, xhi)
+
         flow, fhi = f(xlow), f(xhi)
         flow = np.inf if np.isnan(flow) else flow
         fhi = np.inf if np.isnan(fhi) else fhi
@@ -159,14 +163,58 @@ class HorseRaceCI(ConfidenceSeqeunce):
         return - s / (mu + eps) + (t - s) / (1 - mu + eps)
 
     @confidence_interval
-    def construct(self, xs, eps=1e-3, verbose=False, **kwargs):
+    def construct(self, xs, eps=1e-3, tol=1e-5, verbose=False, batch=False, log_every=100, **kwargs):
         ts = np.arange(1, len(xs) + 1)
         ss = xs.cumsum()
+        telapsed = []
 
-        lower_ci = self.find_root(ts, ss, xinit=eps, xmin=0, xmax=1, verbose=verbose)
-        upper_ci = self.find_root(ts, ss, xinit=1 - eps, xmin=0, xmax=1, verbose=verbose)
+        if batch:
+            lower_ci = self.find_root(ts, ss, xinit=eps, xmin=0, xmax=1, verbose=verbose)
+            upper_ci = self.find_root(ts, ss, xinit=1 - eps, xmin=0, xmax=1, verbose=verbose)
+        else:
+            lower_ci = np.zeros_like(xs).astype(float)
+            upper_ci = np.ones_like(xs).astype(float)
 
-        return lower_ci, upper_ci
+            start = time.time()
+            for t in range(1, len(xs) + 1):
+                mu_hat = ss[t - 1] / t
+                if mu_hat == 0:
+                    mu_hat = eps
+                if mu_hat == 1:
+                    mu_hat = 1 - eps
+
+                # use scipy's bisect with a customized initialization rule
+                xinit_low = lower_ci[t - 2] if t > 1 else eps
+                if self.f(xinit_low, t, ss[t - 1]) < np.log(1 / self.delta):
+                    lower_ci[t - 1] = lower_ci[t - 2]
+                else:
+                    lower_ci[t - 1] = self.find_root_bisect(t, ss[t - 1],
+                                                            xinits=(lower_ci[t - 2], mu_hat),
+                                                            tol=tol,
+                                                            verbose=verbose)
+                    if lower_ci[t - 1] == -1:
+                        print("bisect encounters ValueError!")
+                        lower_ci[t - 1] = lower_ci[t - 2]
+
+                xinit_up = upper_ci[t - 2] if t > 1 else 1 - eps
+                if self.f(xinit_up, t, ss[t - 1]) < np.log(1 / self.delta):
+                    upper_ci[t - 1] = upper_ci[t - 2]
+                else:
+                    upper_ci[t - 1] = self.find_root_bisect(t, ss[t - 1],
+                                                            xinits=(mu_hat, upper_ci[t - 2]),
+                                                            tol=tol,
+                                                            verbose=verbose)
+                    if upper_ci[t - 1] == -1:
+                        print("bisect encounters ValueError!")
+                        upper_ci[t - 1] = upper_ci[t - 2]
+
+                if t % log_every == 0:
+                    end = time.time()
+                    telapsed.append(end - start)
+                    print(t, end=' ')
+                    start = end
+
+        return lower_ci, upper_ci, telapsed
 
     @confidence_interval
     def construct_outer(self, xs):
