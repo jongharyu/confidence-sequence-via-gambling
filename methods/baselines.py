@@ -118,7 +118,14 @@ class ConfidenceSeqeunce:
 
         if verbose:
             print('cnt, diff:', cnt, np.abs(xhi - xlow))
-        return xlow if flow > 0 else xhi
+
+        root = xlow if flow > 0 else xhi
+        assert xinits[0] <= root <= xinits[1]
+        if verbose:
+            # for debugging
+            print("\t=>", xinits, (xlow, flow), (xhi, fhi), root)
+
+        return root
 
 
 # based on discrete-coin betting + "naive embedding"
