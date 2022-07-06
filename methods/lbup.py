@@ -207,7 +207,7 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
             if (t + self.tup) % log_every == 0:
                 end = time.time()
                 telapsed.append(end - start)
-                print(t, end=' ')
+                print(t + self.tup, end=' ')
                 start = end
 
         return lower_ci, upper_ci, telapsed
