@@ -62,7 +62,8 @@ class HybridUPCI(ConfidenceSeqeunce):
         fs = []
         for t in range(self.tup + 1, len(xs) + 1):
             if t % every == 0:
-                print(t)
+                mu_hat = (sums[t - self.tup - 1, 1] + sums0[1]) / (sums[t - self.tup - 1, 0] + sums0[0])
+                print("t={}, f(mu_hat)={}".format(t + self.tup, lbup.f(mu_hat, sums[t - self.tup - 1], sums_c[t - self.tup - 1])))
                 fs = np.zeros_like(ms)
                 for i, m in enumerate(ms):
                     fs[i] = lbup.f(m, sums[t - self.tup - 1], sums_c[t - self.tup - 1])
@@ -71,6 +72,7 @@ class HybridUPCI(ConfidenceSeqeunce):
                 kwargs['label'] += ' (order={}; t={})'.format(self.n, t)
                 ax.plot(ms, fs, **kwargs)
                 ax.axhline(np.log(1 / self.delta), linestyle='--')
+                ax.axvline(x=mu_hat)
                 if legend:
                     ax.legend()
 
