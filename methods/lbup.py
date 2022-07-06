@@ -173,7 +173,7 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
         telapsed = []
         start = time.time()
         for t in range(1, len(xs) + 1):
-            mu_hat = sums[t - 1, 1] / sums[t - 1, 0]
+            mu_hat = (sums[t - 1, 1] + self.sums0[1]) / (sums[t - 1, 0] + self.sums0[0])
 
             # use scipy's fsolve (somehow doesn't work properly)
             # lower_ci[t - 1] = self.find_root_fsolve(sums[t - 1], sums_c[t - 1],
