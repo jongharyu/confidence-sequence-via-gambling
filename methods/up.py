@@ -55,6 +55,7 @@ class UniversalPortfolioCI(ConfidenceSeqeunce):
         upper_ci = np.zeros_like(xs).astype(float)
 
         logsumprod = np.array([0.])
+        logweights = np.array([0.])
 
         xinit_low = 0.01
         xinit_up = 0.99
@@ -93,6 +94,7 @@ class UniversalPortfolioCI(ConfidenceSeqeunce):
         fs = []
         fps = []
         logsumprod = np.array([0.])
+        logweights = np.array([0.])
         for t in range(1, len(xs) + 1):
             x = xs[t - 1]
             logsumprod = self.update_logsumprod(logsumprod, x)
