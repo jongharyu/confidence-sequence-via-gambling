@@ -109,7 +109,6 @@ class UniversalPortfolioCI(ConfidenceSeqeunce):
                     fps[i] = self.fprime(m, t, logweights)
                 if 'label' not in kwargs:
                     kwargs['label'] = 'UP'
-                kwargs['label'] += ' (t={})'.format(t)
                 ax.plot(ms, fs, **kwargs)
                 ax.axhline(np.log(1 / self.delta), linestyle='--')
                 if legend:

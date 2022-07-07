@@ -150,7 +150,10 @@ class CoinBettingCI(ConfidenceSeqeunce):
 
         return lower_ci, upper_ci
 
-    def plot(self, xs, delta):
+    def plot(self, xs, every=10, ax=None, legend=False, **kwargs):
+        if ax is None:
+            fig, ax = plt.subplots(ncols=1, nrows=1)
+
         raise NotImplementedError
 
 
@@ -247,8 +250,7 @@ class HorseRaceCI(ConfidenceSeqeunce):
             if t % every == 0:
                 fs = self.f(mus, t, xs[:t].sum())
                 if 'label' not in kwargs:
-                    kwargs['label'] = 'Two-horse race'
-                kwargs['label'] += ' (t={})'.format(t)
+                    kwargs['label'] = 'HR'
                 ax.plot(mus, fs, **kwargs)
                 ax.axhline(np.log(1 / self.delta), linestyle='--')
                 if legend:

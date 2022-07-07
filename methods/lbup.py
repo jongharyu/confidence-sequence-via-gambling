@@ -160,10 +160,12 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
         return np.nan_to_num(val, nan=np.inf)
 
     def fprime(self, x, *args):
-        pass
+        raise NotImplementedError
 
     @confidence_interval
-    def construct(self, xs, tol=1e-5, eps=1e-7, verbose=False, log_every=100, **kwargs):
+    def construct(self, xs, tol=1e-5, eps=1e-5, verbose=False, log_every=100, **kwargs):
+        # Note: if eps is too small, then due to numerical instability of the definite integrals,
+        #       the behavior may be erratic
         lower_ci = np.zeros_like(xs).astype(float)
         upper_ci = np.ones_like(xs).astype(float)
 
@@ -184,23 +186,23 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
             # use scipy's bisect with a customized initialization rule
             xinit_low = lower_ci[t - 2] if t > 1 else eps
             if self.f(xinit_low, sums[t - 1], sums_c[t - 1]) < np.log(1 / self.delta):
-                lower_ci[t - 1] = lower_ci[t - 2]
+                lower_ci[t - 1] = xinit_low
             else:
                 lower_ci[t - 1] = self.find_root_bisect(sums[t - 1], sums_c[t - 1],
-                                                        xinits=(lower_ci[t - 2], mu_hat),
-                                                        tol=tol)
-                if lower_ci[t - 1] == -1:
+                                                        xinits=(xinit_low, mu_hat),
+                                                        tol=tol, verbose=verbose)
+                if lower_ci[t - 1] == -1 or np.isnan(lower_ci[t - 1]):
                     print("bisect encounters ValueError!")
                     lower_ci[t - 1] = lower_ci[t - 2]
 
             xinit_up = upper_ci[t - 2] if t > 1 else 1 - eps
             if self.f(xinit_up, sums[t - 1], sums_c[t - 1]) < np.log(1 / self.delta):
-                upper_ci[t - 1] = upper_ci[t - 2]
+                upper_ci[t - 1] = xinit_up
             else:
                 upper_ci[t - 1] = self.find_root_bisect(sums[t - 1], sums_c[t - 1],
-                                                        xinits=(mu_hat, upper_ci[t - 2]),
-                                                        tol=tol)
-                if upper_ci[t - 1] == -1:
+                                                        xinits=(mu_hat, xinit_up),
+                                                        tol=tol, verbose=verbose)
+                if upper_ci[t - 1] == -1 or np.isnan(upper_ci[t - 1]):
                     print("bisect encounters ValueError!")
                     upper_ci[t - 1] = upper_ci[t - 2]
 
@@ -229,7 +231,7 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
                     fs[i] = self.f(m, sums[t - 1], sums_c[t - 1])
                 if 'label' not in kwargs:
                     kwargs['label'] = 'LBUP'
-                kwargs['label'] += ' (order={}; t={})'.format(self.n, t)
+                kwargs['label'] += ' (n={})'.format(self.n, t)
                 ax.plot(ms, fs, **kwargs)
                 ax.axhline(np.log(1 / self.delta), linestyle='--')
                 if legend:
