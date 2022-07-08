@@ -67,6 +67,14 @@ class UniversalPortfolioCI(ConfidenceSeqeunce):
             logsumprod = self.update_logsumprod(logsumprod, x)
             logweights = self.compute_logweights(t, logsumprod)
 
+            if verbose:
+                # to see if log wealth(mu_hat) <= 0 always:
+                mu_hat = xs[:t].mean()
+                f_mu_hat = self.f(mu_hat, t, logweights)
+                if f_mu_hat >= 0:
+                    print("t={}, mu_hat={}, f_t(mu_hat)={}".format(t, mu_hat, f_mu_hat))
+                    print("t={}, mu_hat={}, f_t'(mu_hat)={}".format(t, mu_hat, self.fprime(mu_hat, t, logweights)))
+
             lower_ci[t - 1] = self.find_root(t, logweights,
                                              xinit=xinit_low, xmin=0, xmax=1,
                                              tol=tol, verbose=verbose)
