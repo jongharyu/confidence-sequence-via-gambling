@@ -7,8 +7,8 @@ import scipy.integrate as integrate
 from scipy.special import binom, logsumexp, gammaln, gammainc
 
 import methods.lbup_integrand
-from methods.baselines import ConfidenceSeqeunce
-from methods.up import UniversalPortfolioCI
+from methods.base import ConfidenceSequence
+from methods.up import StockInvestmentCI
 from utils import confidence_interval
 
 
@@ -107,7 +107,7 @@ class StitchedTruncatedGamma:
     def log_z(self):
         log_z2 = self.tg2.log_z
         log_z1 = self.tg1.log_z
-        print((np.log(self.m), log_z2), (np.log(1 - self.m), log_z1))
+        # print((np.log(self.m), log_z2), (np.log(1 - self.m), log_z1))
         return logsumexp([log_z2 + np.log(self.m),
                           log_z1 + np.log(1 - self.m)])
 
@@ -127,12 +127,12 @@ class StitchedTruncatedGammaParams:
             return logsumexp([log_z1, log_z2])
 
 
-class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
-    def __init__(self, delta, n,
+class LowerBoundStockInvestmentCI(ConfidenceSequence):
+    def __init__(self, n,
                  sums0=0, sums_c0=0,
                  tup=0, betas=(1 / 2, 1 / 2), logweights=None,
                  use_cython=True):
-        super().__init__(delta)
+        super().__init__()
         self.n = n
         self.use_cython = use_cython
         self.tg_params = TruncatedGammaParams(self.n, self.use_cython)
@@ -155,7 +155,7 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
         val = log_numer - log_denom
 
         if self.logweights is not None:
-            val += UniversalPortfolioCI(self.delta, betas=self.betas).f(m, self.tup, self.logweights)
+            val += StockInvestmentCI(betas=self.betas).f(m, self.tup, self.logweights)
 
         return np.nan_to_num(val, nan=np.inf)
 
@@ -163,7 +163,7 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
         raise NotImplementedError
 
     @confidence_interval
-    def construct(self, xs, tol=1e-5, eps=1e-5, verbose=False, log_every=100, **kwargs):
+    def construct(self, delta, xs, tol=1e-5, eps=1e-5, verbose=False, log_every=100, **kwargs):
         # Note: if eps is too small, then due to numerical instability of the definite integrals,
         #       the behavior may be erratic
         lower_ci = np.zeros_like(xs).astype(float)
@@ -185,10 +185,10 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
 
             # use scipy's bisect with a customized initialization rule
             xinit_low = lower_ci[t - 2] if t > 1 else eps
-            if self.f(xinit_low, sums[t - 1], sums_c[t - 1]) < np.log(1 / self.delta):
+            if self.f(xinit_low, sums[t - 1], sums_c[t - 1]) < np.log(1 / delta):
                 lower_ci[t - 1] = xinit_low
             else:
-                lower_ci[t - 1] = self.find_root_bisect(sums[t - 1], sums_c[t - 1],
+                lower_ci[t - 1] = self.find_root_bisect(delta, sums[t - 1], sums_c[t - 1],
                                                         xinits=(xinit_low, mu_hat),
                                                         tol=tol, verbose=verbose)
                 if lower_ci[t - 1] == -1 or np.isnan(lower_ci[t - 1]):
@@ -196,10 +196,10 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
                     lower_ci[t - 1] = lower_ci[t - 2]
 
             xinit_up = upper_ci[t - 2] if t > 1 else 1 - eps
-            if self.f(xinit_up, sums[t - 1], sums_c[t - 1]) < np.log(1 / self.delta):
+            if self.f(xinit_up, sums[t - 1], sums_c[t - 1]) < np.log(1 / delta):
                 upper_ci[t - 1] = xinit_up
             else:
-                upper_ci[t - 1] = self.find_root_bisect(sums[t - 1], sums_c[t - 1],
+                upper_ci[t - 1] = self.find_root_bisect(delta, sums[t - 1], sums_c[t - 1],
                                                         xinits=(mu_hat, xinit_up),
                                                         tol=tol, verbose=verbose)
                 if upper_ci[t - 1] == -1 or np.isnan(upper_ci[t - 1]):
@@ -214,7 +214,7 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
 
         return lower_ci, upper_ci, telapsed
 
-    def plot(self, xs, every=10, ax=None, legend=False, **kwargs):
+    def plot(self, delta, xs, every=10, ax=None, legend=False, **kwargs):
         if ax is None:
             fig, ax = plt.subplots(ncols=1, nrows=1)
         ms = np.arange(0.01, 1, 0.01)
@@ -233,7 +233,7 @@ class LowerBoundUniversalPortfolioCI(ConfidenceSeqeunce):
                     kwargs['label'] = 'LBUP'
                 kwargs['label'] += ' (n={})'.format(self.n, t)
                 ax.plot(ms, fs, **kwargs)
-                ax.axhline(np.log(1 / self.delta), linestyle='--')
+                ax.axhline(np.log(1 / delta), linestyle='--')
                 if legend:
                     ax.legend()
 
