@@ -3,11 +3,11 @@ import time
 import numpy as np
 
 from methods.base import ConfidenceSequence
+from methods.precise_co96 import newton_1d_bnd
 from utils import confidence_interval
-from precise_co96 import newton_1d_bnd
 
 
-class PRECiSE_CO96(ConfidenceSequence):
+class PRECiSE_R70(ConfidenceSequence):
     """
     PRECISE_R70    Portfolio REgret for Confidence SEquences using Robbins [1970].
     [L,U] = PRECISE_R70(X,delta) produces two matrices, of the same
@@ -22,7 +22,7 @@ class PRECiSE_CO96(ConfidenceSequence):
         self.refine = refine
 
     @confidence_interval
-    def construct(delta, xs, eps=1e-4, verbose=False, log_every=100, **kwargs):
+    def construct(self, delta, xs, eps=1e-4, verbose=False, log_every=100, **kwargs):
         lower_ci = np.zeros_like(xs)
         upper_ci = np.zeros_like(xs)
 
@@ -55,6 +55,7 @@ class PRECiSE_CO96(ConfidenceSequence):
                         m_ub = m_try
                     else:
                         m_lb = m_try
+
             upper_ci[t] = m_ub
             m_ub_old = m_ub
 
@@ -73,6 +74,7 @@ class PRECiSE_CO96(ConfidenceSequence):
                         m_lb = m_try
                     else:
                         m_ub = m_try
+
             lower_ci[t] = m_lb
             m_lb_old = m_lb
 
@@ -93,7 +95,7 @@ def find_max_log_wealth_constrained_lil(g, mn, mx):
 
     betstar, fval = newton_1d_bnd(myf, df, df2, -1, 1)
 
-    pdf = lambda bet: np.log(np.log(6.6) + 1) / (2 * abs(bet) * (1 + np.log(6.6 / abs(bet))) * (np.log(1 + np.log(6.6 / abs(bet)))) ** 2)
+    pdf = lambda bet: np.log(np.log(6.6) + 1) / (2 * np.abs(bet) * (1 + np.log(6.6 / np.abs(bet))) * (np.log(1 + np.log(6.6 / np.abs(bet)))) ** 2)
 
     V = np.sum(g ** 2)
 

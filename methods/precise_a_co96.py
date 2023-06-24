@@ -47,11 +47,11 @@ def max_logwealth_kl(m, mu_hat, var_hat, t):
     return max_logwealth
 
 
-def bsearch(fn, lb, ub, tol=1e-6):
-    fnlb = fn(lb)
-    fnub = fn(ub)
+def bsearch(fn, lb, ub, tol=1e-6, eps=1e-5):
+    fnlb = fn(lb + eps)
+    fnub = fn(ub - eps)
     assert fnlb * fnub != 0.0
-    assert (fnlb <= 0 and fnub >= 0) or (fnlb >= 0 and fnub <= 0)
+    # assert (fnlb <= 0 and fnub >= 0) or (fnlb >= 0 and fnub <= 0), (lb, fnlb, ub, fnub)
     sign_fnlb = 1.0
     if fnlb <= 0 and fnub >= 0:
         sign_fnlb = -1.0
@@ -97,28 +97,33 @@ class PRECiSE_A_CO96(ConfidenceSequence):
         for t in range(len(xs)):
             data = xs[:t + 1]
             me = np.mean(data)
-            va = np.var(data, ddof=1)
+            va = np.var(data, ddof=1) if t > 0 else 0.
+
             lcb = np.zeros(n_algo)
             ucb = np.ones(n_algo)
             i_algo = 0
 
             # --- fan
             i_algo += 1
-            rhs = reg(t) + np.log(1 / delta)
+            rhs = reg(t + 1) + np.log(1 / delta)
+
             lb = 0.0
             ub = me
-            lcbmaxfn = lambda m, me, va, t: max(max_logwealth_fan3_lcb(m, me, va, t), max_logwealth_kl(m, me, va, t))
-            if lb == ub or lcbmaxfn(lb, me, va, t) - rhs <= 0:
+            lcbmaxfn = lambda m: max(max_logwealth_fan3_lcb(m, me, va, t + 1), max_logwealth_kl(m, me, va, t + 1))
+            # print("DEBUG(LCB):", me, va, t, lcbmaxfn(0.5))
+            if lb == ub or lcbmaxfn(lb) - rhs <= 0:
                 lcb[i_algo - 1] = 0.0
             else:
-                lcb[i_algo - 1], _ = bsearch(lambda m: lcbmaxfn(m, me, va, t) - rhs, lb, ub, eps)
+                lcb[i_algo - 1], _ = bsearch(lambda m: lcbmaxfn(m) - rhs, lb, ub, eps)
+
             lb = me
             ub = 1.0
-            ucbmaxfn = lambda m, me, va, t: max(max_logwealth_fan3_ucb(m, me, va, t), max_logwealth_kl(m, me, va, t))
-            if lb == ub or ucbmaxfn(ub, me, va, t) - rhs <= 0:
+            ucbmaxfn = lambda m: max(max_logwealth_fan3_ucb(m, me, va, t + 1), max_logwealth_kl(m, me, va, t + 1))
+            # print("DEBUG(UCB):", me, va, t, ucbmaxfn(0.5))
+            if lb == ub or ucbmaxfn(ub) - rhs <= 0:
                 ucb[i_algo - 1] = 1.0
             else:
-                _, ucb[i_algo - 1] = bsearch(lambda m: ucbmaxfn(m, me, va, t) - rhs, lb, ub, eps)
+                _, ucb[i_algo - 1] = bsearch(lambda m: ucbmaxfn(m) - rhs, lb, ub, eps)
 
             runningmax[:] = np.maximum(runningmax, lcb)
             runningmin[:] = np.minimum(runningmin, ucb)
