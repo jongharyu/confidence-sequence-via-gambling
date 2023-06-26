@@ -3,7 +3,7 @@ import time
 import numpy as np
 
 from methods.base import ConfidenceSequence
-from methods.precise_co96 import newton_1d_bnd
+from methods.precise.utils import newton_1d_bnd
 from utils import confidence_interval
 
 
