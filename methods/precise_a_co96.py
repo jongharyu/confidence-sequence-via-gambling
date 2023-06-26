@@ -19,6 +19,7 @@ def max_logwealth_fan3_lcb(m, mu_hat, var_hat, t):
         max_logwealth = (A * A / (A + B) - (-np.log(1 - lam) - lam) * B) * t
     return max_logwealth
 
+
 def max_logwealth_fan3_ucb(m, mu_hat, var_hat, t):
     if m == 1.0:
         max_logwealth = (0.5 * ((1 - mu_hat) ** 2) / (var_hat + (1 - mu_hat) ** 2)) * t
@@ -51,7 +52,7 @@ def bsearch(fn, lb, ub, tol=1e-6, eps=1e-5):
     fnlb = fn(lb + eps)
     fnub = fn(ub - eps)
     assert fnlb * fnub != 0.0
-    # assert (fnlb <= 0 and fnub >= 0) or (fnlb >= 0 and fnub <= 0), (lb, fnlb, ub, fnub)
+    assert (fnlb <= 0 and fnub >= 0) or (fnlb >= 0 and fnub <= 0), (lb, fnlb, ub, fnub)
     sign_fnlb = 1.0
     if fnlb <= 0 and fnub >= 0:
         sign_fnlb = -1.0
@@ -110,7 +111,6 @@ class PRECiSE_A_CO96(ConfidenceSequence):
             lb = 0.0
             ub = me
             lcbmaxfn = lambda m: max(max_logwealth_fan3_lcb(m, me, va, t + 1), max_logwealth_kl(m, me, va, t + 1))
-            # print("DEBUG(LCB):", me, va, t, lcbmaxfn(0.5))
             if lb == ub or lcbmaxfn(lb) - rhs <= 0:
                 lcb[i_algo - 1] = 0.0
             else:
@@ -119,7 +119,6 @@ class PRECiSE_A_CO96(ConfidenceSequence):
             lb = me
             ub = 1.0
             ucbmaxfn = lambda m: max(max_logwealth_fan3_ucb(m, me, va, t + 1), max_logwealth_kl(m, me, va, t + 1))
-            # print("DEBUG(UCB):", me, va, t, ucbmaxfn(0.5))
             if lb == ub or ucbmaxfn(ub) - rhs <= 0:
                 ucb[i_algo - 1] = 1.0
             else:
