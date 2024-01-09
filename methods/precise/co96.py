@@ -2,6 +2,7 @@ import time
 
 import numpy as np
 from scipy.special import gammaln
+from tqdm import tqdm
 
 from methods.base import ConfidenceSequence
 from methods.precise.utils import newton_1d_bnd
@@ -49,11 +50,11 @@ class PRECiSE_CO96(ConfidenceSequence):
 
         telapsed = []
         start = time.time()
-        for t in range(len(xs)):
-            if t % 100 == 0:
-                print(t, end=' ')
+        for t in tqdm(range(len(xs))):
+            # if t % 100 == 0:
+            #     print(t, end=' ')
 
-            mu_hat = xs[:t].mean()
+            mu_hat = xs[:t + 1].mean()
 
             # Upper CI
             m_ub = m_ub_old
@@ -64,10 +65,10 @@ class PRECiSE_CO96(ConfidenceSequence):
             bmax = 1 / m_try
             bmin = -1 / (1 - m_try)
 
-            b_star, log_W_star = find_max_log_wealth_constrained(xs[:t] - m_try, bmin, bmax)
+            b_star, log_W_star = find_max_log_wealth_constrained(xs[:t + 1] - m_try, bmin, bmax)
             b = min((-bmin + b_star) / (bmax - bmin), 1)
-            bound = max(func(np.ceil(b * t - 0.5) / t, np.ceil(b * t - 0.5), t),
-                        func(np.floor(mu_hat * t + 0.5) / t, np.floor(mu_hat * t + 0.5), t))
+            bound = max(func(np.ceil(b * (t + 1) - 0.5) / (t + 1), np.ceil(b * (t + 1) - 0.5), (t + 1)),
+                        func(np.floor(mu_hat * (t + 1) + 0.5) / t, np.floor(mu_hat * (t + 1) + 0.5), (t + 1)))
 
             if log_W_star - bound >= np.log(1 / delta):
                 while (m_ub - m_lb) > 0.0001:
@@ -75,14 +76,16 @@ class PRECiSE_CO96(ConfidenceSequence):
                     bmax = 1 / m_try
                     bmin = -1 / (1 - m_try)
 
-                    b_star, log_W_star = find_max_log_wealth_constrained(xs[:t] - m_try, bmin, bmax)
+                    b_star, log_W_star = find_max_log_wealth_constrained(xs[:t + 1] - m_try, bmin, bmax)
                     if log_W_star - bound >= np.log(1 / delta):
                         m_ub = m_try
                         if self.refine:
                             # to have a refinement of the regret
                             b = min((-bmin + b_star) / (bmax - bmin), 1)
-                            bound = max(func(np.ceil(b * t - 0.5) / t, np.ceil(b * t - 0.5), t),
-                                        func(np.floor(mu_hat * t + 0.5) / t, np.floor(mu_hat * t + 0.5), t))
+                            bound = max(
+                                func(np.ceil(b * (t + 1) - 0.5) / (t + 1), np.ceil(b * (t + 1) - 0.5), (t + 1)),
+                                func(np.floor(mu_hat * (t + 1) + 0.5) / (t + 1), np.floor(mu_hat * (t + 1) + 0.5), (t + 1))
+                            )
                     else:
                         m_lb = m_try
 
@@ -98,10 +101,10 @@ class PRECiSE_CO96(ConfidenceSequence):
             bmax = 1 / m_try
             bmin = -1 / (1 - m_try)
 
-            b_star, log_W_star = find_max_log_wealth_constrained(xs[:t] - m_try, bmin, bmax)
+            b_star, log_W_star = find_max_log_wealth_constrained(xs[:t + 1] - m_try, bmin, bmax)
             b = min((-bmin + b_star) / (bmax - bmin), 1)
-            bound = max(func(np.ceil(b * t - 0.5) / t, np.ceil(b * t - 0.5), t),
-                        func(np.floor(mu_hat * t + 0.5) / t, np.floor(mu_hat * t + 0.5), t))
+            bound = max(func(np.ceil(b * (t + 1) - 0.5) / (t + 1), np.ceil(b * (t + 1) - 0.5), (t + 1)),
+                        func(np.floor(mu_hat * (t + 1) + 0.5) / (t + 1), np.floor(mu_hat * (t + 1) + 0.5), (t + 1)))
 
             if log_W_star - bound >= np.log(1 / delta):
                 while (m_ub - m_lb) > 0.0001:
@@ -109,7 +112,7 @@ class PRECiSE_CO96(ConfidenceSequence):
                     bmax = 1 / m_try
                     bmin = -1 / (1 - m_try)
 
-                    b_star, log_W_star = find_max_log_wealth_constrained(xs[:t] - m_try, bmin, bmax)
+                    b_star, log_W_star = find_max_log_wealth_constrained(xs[:t + 1] - m_try, bmin, bmax)
                     if log_W_star - bound >= np.log(1 / delta):
                         m_lb = m_try
                         # uncomment next lines to have a refinement of the regret
@@ -117,8 +120,8 @@ class PRECiSE_CO96(ConfidenceSequence):
                         if self.refine:
                             # to have a refinement of the regret
                             b = min((-bmin + b_star) / (bmax - bmin), 1)
-                            bound = max(func(np.ceil(b * t - 0.5) / t, np.ceil(b * t - 0.5), t),
-                                        func(np.floor(mu_hat * t + 0.5) / t, np.floor(mu_hat * t + 0.5), t))
+                            bound = max(func(np.ceil(b * (t + 1) - 0.5) / (t + 1), np.ceil(b * (t + 1) - 0.5), (t + 1)),
+                                        func(np.floor(mu_hat * (t + 1) + 0.5) / (t + 1), np.floor(mu_hat * (t + 1) + 0.5), (t + 1)))
 
                     else:
                         m_ub = m_try
@@ -129,8 +132,6 @@ class PRECiSE_CO96(ConfidenceSequence):
             if t % log_every == 0:
                 end = time.time()
                 telapsed.append(end - start)
-                if verbose:
-                    print(t, end=' ')
                 start = end
 
         return lower_ci, upper_ci, telapsed

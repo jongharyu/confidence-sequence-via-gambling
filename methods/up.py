@@ -4,6 +4,7 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.special import betaln, logsumexp
+from tqdm import tqdm
 
 from methods.base import ConfidenceSequence
 from utils import confidence_interval, multibetaln
@@ -64,7 +65,7 @@ class StockInvestmentCI(ConfidenceSequence):
 
         telapsed = []
         start = time.time()
-        for t in range(1, len(xs) + 1):
+        for t in tqdm(range(1, len(xs) + 1)):
             x = xs[t - 1]
             logsumprod = self.update_logsumprod(logsumprod, x)
             logweights = self.compute_logweights(t, logsumprod)
@@ -90,7 +91,7 @@ class StockInvestmentCI(ConfidenceSequence):
             if t % log_every == 0:
                 end = time.time()
                 telapsed.append(end - start)
-                print(t, end=' ')
+                # print(t, end=' ')
                 start = end
 
         return lower_ci, upper_ci, telapsed, logweights

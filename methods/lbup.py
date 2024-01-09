@@ -5,6 +5,7 @@ import numpy as np
 import scipy
 import scipy.integrate as integrate
 from scipy.special import binom, logsumexp, gammaln, gammainc
+from tqdm import tqdm
 
 import methods.lbup_integrand
 from methods.base import ConfidenceSequence
@@ -174,7 +175,7 @@ class LowerBoundStockInvestmentCI(ConfidenceSequence):
 
         telapsed = []
         start = time.time()
-        for t in range(1, len(xs) + 1):
+        for t in tqdm(range(1, len(xs) + 1)):
             mu_hat = (sums[t - 1, 1] + self.sums0[1]) / (sums[t - 1, 0] + self.sums0[0])
 
             # use scipy's fsolve (somehow doesn't work properly)
@@ -209,7 +210,7 @@ class LowerBoundStockInvestmentCI(ConfidenceSequence):
             if (t + self.tup) % log_every == 0:
                 end = time.time()
                 telapsed.append(end - start)
-                print(t + self.tup, end=' ')
+                # print(t + self.tup, end=' ')
                 start = end
 
         return lower_ci, upper_ci, telapsed

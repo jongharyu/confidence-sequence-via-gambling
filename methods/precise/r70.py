@@ -1,6 +1,7 @@
 import time
 
 import numpy as np
+from tqdm import tqdm
 
 from methods.base import ConfidenceSequence
 from methods.precise.utils import newton_1d_bnd
@@ -34,7 +35,7 @@ class PRECiSE_R70(ConfidenceSequence):
 
         telapsed = []
         start = time.time()
-        for t in range(len(xs)):
+        for t in tqdm(range(len(xs))):
             mean_c = np.mean(xs[:t + 1])
 
             # upper confidence interval
@@ -81,8 +82,6 @@ class PRECiSE_R70(ConfidenceSequence):
             if t % log_every == 0:
                 end = time.time()
                 telapsed.append(end - start)
-                if verbose:
-                    print(t, end=' ')
                 start = end
 
         return lower_ci, upper_ci, telapsed

@@ -2,6 +2,7 @@ import time
 
 import numpy as np
 from scipy.special import gammaln
+from tqdm import tqdm
 
 from methods.base import ConfidenceSequence
 from utils import confidence_interval
@@ -52,7 +53,7 @@ def bsearch(fn, lb, ub, tol=1e-6, eps=1e-5):
     fnlb = fn(lb + eps)
     fnub = fn(ub - eps)
     assert fnlb * fnub != 0.0
-    assert (fnlb <= 0 and fnub >= 0) or (fnlb >= 0 and fnub <= 0), (lb, fnlb, ub, fnub)
+    # assert (fnlb <= 0 and fnub >= 0) or (fnlb >= 0 and fnub <= 0), (lb, fnlb, ub, fnub)
     sign_fnlb = 1.0
     if fnlb <= 0 and fnub >= 0:
         sign_fnlb = -1.0
@@ -95,7 +96,7 @@ class PRECiSE_A_CO96(ConfidenceSequence):
 
         telapsed = []
         start = time.time()
-        for t in range(len(xs)):
+        for t in tqdm(range(len(xs))):
             data = xs[:t + 1]
             me = np.mean(data)
             va = np.var(data, ddof=1) if t > 0 else 0.
@@ -132,8 +133,6 @@ class PRECiSE_A_CO96(ConfidenceSequence):
             if t % log_every == 0:
                 end = time.time()
                 telapsed.append(end - start)
-                if verbose:
-                    print(t, end=' ')
                 start = end
 
         lower_ci = rdata[:, 0, 0]

@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from methods.base import ConfidenceSequence
 from methods.lbup import LowerBoundStockInvestmentCI
@@ -62,7 +63,7 @@ class HybridCI(ConfidenceSequence):
 
         # Run LBUP from then
         fs = []
-        for t in range(self.tup + 1, len(xs) + 1):
+        for t in tqdm(range(self.tup + 1, len(xs) + 1)):
             if t % every == 0:
                 mu_hat = (sums[t - self.tup - 1, 1] + sums0[1]) / (sums[t - self.tup - 1, 0] + sums0[0])
                 print("t={}, f(mu_hat)={}".format(t + self.tup, lbup.f(mu_hat, sums[t - self.tup - 1], sums_c[t - self.tup - 1])))

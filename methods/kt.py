@@ -3,6 +3,7 @@ import time
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.special import betaln, digamma
+from tqdm import tqdm
 
 from methods.base import ConfidenceSequence
 from utils import confidence_interval, binary_entropy, multibetaln
@@ -63,7 +64,7 @@ class HorseRaceCI(ConfidenceSequence):
             upper_ci = np.ones_like(xs).astype(float)
 
             start = time.time()
-            for t in range(1, len(xs) + 1):
+            for t in tqdm(range(1, len(xs) + 1)):
                 mu_hat = ss[t - 1] / t
                 if mu_hat == 0:
                     mu_hat = eps
@@ -98,7 +99,6 @@ class HorseRaceCI(ConfidenceSequence):
                 if t % log_every == 0:
                     end = time.time()
                     telapsed.append(end - start)
-                    print(t, end=' ')
                     start = end
 
         return lower_ci, upper_ci, telapsed
@@ -123,7 +123,7 @@ class HorseRaceCI(ConfidenceSequence):
         mus = np.arange(0.01, 1, 0.01)
 
         fs = []
-        for t in range(1, len(xs) + 1):
+        for t in tqdm(range(1, len(xs) + 1)):
             if t % every == 0:
                 fs = self.f(mus, t, xs[:t].sum())
                 if 'label' not in kwargs:
@@ -163,7 +163,7 @@ class UnboundedHorseRaceCI(HorseRaceCI):
         ms = np.arange(0.01, upper_bound, 0.005)
 
         fs = []
-        for t in range(1, len(xs) + 1):
+        for t in tqdm(range(1, len(xs) + 1)):
             if t % every == 0:
                 fs = np.array([self.f(m, t, xs[:t]) for m in ms])
                 # fs[fs == np.inf] = 1e3
@@ -207,7 +207,7 @@ class TruncatedHorseRaceCI(HorseRaceCI):
         ms = np.arange(0.01, 1, 0.005)
 
         fs = []
-        for t in range(1, len(xs) + 1):
+        for t in tqdm(range(1, len(xs) + 1)):
             if t % every == 0:
                 fs = np.array([self.f(m, upbd, t, xs[:t]) for m in ms])
                 # fs[fs == np.inf] = 1e3
