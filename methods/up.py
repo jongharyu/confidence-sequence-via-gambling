@@ -6,8 +6,8 @@ import numpy as np
 from scipy.special import betaln, logsumexp
 from tqdm import tqdm
 
-from methods.base import ConfidenceSequence
-from utils import confidence_interval, multibetaln
+from methods.base import ConfidenceSequence, confidence_interval
+from utils.special_functions import multibetaln
 
 
 class StockInvestmentCI(ConfidenceSequence):
@@ -53,7 +53,8 @@ class StockInvestmentCI(ConfidenceSequence):
                 betaln(*self.betas))
 
     @confidence_interval
-    def construct(self, delta, xs, eps=0, tol=1e-5, verbose=False, log_every=100, **kwargs):
+    def construct(self, delta, xs, eps=0, tol=1e-5, verbose=False, log_every=100, tqdm_=True, **kwargs):
+        tqdm_ = tqdm if tqdm_ else lambda x: x
         lower_ci = np.zeros_like(xs).astype(float)
         upper_ci = np.zeros_like(xs).astype(float)
 
@@ -65,7 +66,7 @@ class StockInvestmentCI(ConfidenceSequence):
 
         telapsed = []
         start = time.time()
-        for t in tqdm(range(1, len(xs) + 1)):
+        for t in tqdm_(range(1, len(xs) + 1)):
             x = xs[t - 1]
             logsumprod = self.update_logsumprod(logsumprod, x)
             logweights = self.compute_logweights(t, logsumprod)
@@ -133,18 +134,21 @@ class MultiStockInvestmentCI(ConfidenceSequence):
         super().__init__()
         self.M = M
         self.betas = .5 * np.ones((self.M,)) if betas is None else np.array(betas)
-        self.logsumprod = None
+        self.logsumprod = self._init_logsumprod()
 
-    def compute_logsumprod_batch(self, ys, verbose=False):
+    def _init_logsumprod(self):
         logsumprod = dict()
         logsumprod[tuple(np.zeros((self.M,)))] = 0
+        return logsumprod
+
+    def update_logsumprod_batch(self, ys, verbose=False):
+        logsumprod = self._init_logsumprod()
         for t in range(1, ys.shape[1] + 1):
             yv = ys[:, t - 1]
-            logsumprod = self.update_logsumprod(logsumprod, yv)
+            logsumprod = self._update_logsumprod(yv, logsumprod)
             if verbose:
                 print(t, end=' ')
         self.logsumprod = logsumprod
-        return logsumprod
 
     def clean_logsumprod(self):
         print('logsumprod had length {}'.format(len(self.logsumprod)), end=', ')
@@ -163,7 +167,10 @@ class MultiStockInvestmentCI(ConfidenceSequence):
                                    self.logsumprod[kv] for kv in self.logsumprod], axis=-1),
                          axis=-1)  # (n, )
 
-    def update_logsumprod(self, logsumprod, yv):
+    def update_logsumprod(self, yv):
+        self.logsumprod = self._update_logsumprod(yv, self.logsumprod)
+
+    def _update_logsumprod(self, yv, logsumprod):
         logsumprod_next = defaultdict(list)
         for kv in logsumprod:
             for j in range(self.M):
@@ -171,7 +178,6 @@ class MultiStockInvestmentCI(ConfidenceSequence):
                     logsumprod[kv] + np.log(yv[j]))
         for kv in logsumprod_next:
             logsumprod_next[kv] = logsumexp(logsumprod_next[kv], axis=0)
-
         return logsumprod_next
 
 

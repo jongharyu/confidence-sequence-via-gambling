@@ -2,10 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from methods.base import ConfidenceSequence
+from methods.base import ConfidenceSequence, confidence_interval
 from methods.lbup import LowerBoundStockInvestmentCI
 from methods.up import StockInvestmentCI
-from utils import confidence_interval
 
 
 class HybridCI(ConfidenceSequence):

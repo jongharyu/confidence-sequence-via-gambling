@@ -5,8 +5,8 @@ from matplotlib import pyplot as plt
 from scipy.special import betaln, digamma
 from tqdm import tqdm
 
-from methods.base import ConfidenceSequence
-from utils import confidence_interval, binary_entropy, multibetaln
+from methods.base import ConfidenceSequence, confidence_interval
+from utils.special_functions import binary_entropy, multibetaln
 
 
 # based on discrete-coin betting + "naive embedding"
@@ -51,7 +51,8 @@ class HorseRaceCI(ConfidenceSequence):
         return - s / (m + eps) + (t - s) / (1 - m + eps)
 
     @confidence_interval
-    def construct(self, delta, xs, eps=1e-3, tol=1e-5, verbose=False, batch=False, log_every=100, **kwargs):
+    def construct(self, delta, xs, eps=1e-3, tol=1e-5, verbose=False, batch=False, log_every=100, tqdm_=True, **kwargs):
+        tqdm_ = tqdm if tqdm_ else lambda x: x
         ts = np.arange(1, len(xs) + 1)
         ss = xs.cumsum()
         telapsed = []
@@ -64,7 +65,7 @@ class HorseRaceCI(ConfidenceSequence):
             upper_ci = np.ones_like(xs).astype(float)
 
             start = time.time()
-            for t in tqdm(range(1, len(xs) + 1)):
+            for t in tqdm_(range(1, len(xs) + 1)):
                 mu_hat = ss[t - 1] / t
                 if mu_hat == 0:
                     mu_hat = eps
@@ -230,23 +231,29 @@ class MultiHorseRaceCI:
         self.M = M
         self.betas = .5 * np.ones((self.M,)) if betas is None else np.array(betas)
 
-    def f(self, qs, ys, eps=0):
+    def f(self, qs, ys, eps=0, only_last=False):
         # qs: (n, M)
         # ys: a sequence of M-dim. vectors; (M, T)
         assert qs.shape[-1] == ys.shape[0]
         assert ys.shape[0] == self.M
-
         mask = ((qs < 0).sum(axis=-1) + (qs > 1).sum(axis=-1)).astype(bool).astype(float)  # (n, )
         mask[mask == 1.] = np.inf
-        mask = mask[:, np.newaxis]  # (n, 1)
 
-        qs = qs[..., np.newaxis]  # (n, M, 1)
-        csys = ys.cumsum(axis=-1)[np.newaxis, ...]  # (1, M, T)
-
-        return np.nan_to_num(
-            mask +
-            multibetaln(csys[0] + self.betas[:, np.newaxis]) +
-            - multibetaln(self.betas) +
-            - (csys * np.log(qs)).sum(axis=1),
-            nan=1e3, posinf=1e3, neginf=-1e3,
-        )  # (n, T)
+        if only_last:
+            ks = ys.sum(axis=-1)  # (M, )
+            return np.nan_to_num(
+                mask +
+                multibetaln(ks + self.betas) +
+                - multibetaln(self.betas) +
+                - np.einsum('m,nm->n', ks, np.log(qs)),
+                nan=1e3, posinf=1e3, neginf=-1e3,
+            )  # (n, )
+        else:
+            csys = ys.cumsum(axis=-1)  # (M, T)
+            return np.nan_to_num(
+                mask[:, np.newaxis] +  # (n, 1)
+                multibetaln(csys + self.betas[:, np.newaxis]) +
+                - multibetaln(self.betas) +
+                - np.einsum('mt,nm->nt', csys, np.log(qs)),
+                nan=1e3, posinf=1e3, neginf=-1e3,
+            )  # (n, T)

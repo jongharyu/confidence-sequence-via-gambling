@@ -8,9 +8,8 @@ from scipy.special import binom, logsumexp, gammaln, gammainc
 from tqdm import tqdm
 
 import methods.lbup_integrand
-from methods.base import ConfidenceSequence
+from methods.base import ConfidenceSequence, confidence_interval
 from methods.up import StockInvestmentCI
-from utils import confidence_interval
 
 
 def logbinom(n, k):
