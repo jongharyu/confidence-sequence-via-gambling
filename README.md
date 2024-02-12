@@ -1,4 +1,4 @@
-# On Confidence Sequences for Bounded Random Processes via Universal Gambling
+## Universal-Gambling-Based Confidence Sequences for Bounded Random Processes 
 
 This repository contains an official codebase of the two papers 
 1. "[On Confidence Sequences for Bounded Random Processes via Universal Gambling](https://arxiv.org/abs/2207.12382)," Jongha (Jon) Ryu and Alankrita Bhatt, arXiv 2022.
