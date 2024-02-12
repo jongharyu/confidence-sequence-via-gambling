@@ -1,7 +1,10 @@
 # On Confidence Sequences for Bounded Random Processes via Universal Gambling
 
-This repository contains an official codebase of the paper ["On Confidence Sequences for Bounded Random Processes via Universal Gambling," Jongha (Jon) Ryu and Alankrita Bhatt, arXiv 2022](https://arxiv.org/abs/2207.12382).
-To run the lower bound universal portfolio (LBUP) with Cython, first run
+This repository contains an official codebase of the two papers 
+1. "[On Confidence Sequences for Bounded Random Processes via Universal Gambling](https://arxiv.org/abs/2207.12382)," Jongha (Jon) Ryu and Alankrita Bhatt, arXiv 2022.
+2. "[Gambling-Based Confidence Sequences for Bounded Random Vectors](https://arxiv.org/abs/2402.03683)," Jongha (Jon) Ryu and Gregory W. Wornell, arXiv 2024.
+
+To run the lower bound universal portfolio (LBUP) of `Ryu and Bhatt (2022)` with Cython, first run
 ```bash
 python3 setup_lbup_integrand.py build_ext --inplace
 ```
