@@ -18,18 +18,16 @@ class StockInvestmentCI(ConfidenceSequence):
     def f(self, m, t, logweights, eps=0, verbose=False):
         # log(wealth of Cover's UP)
         if verbose:
-            print('t, mu:', t, m)
-        return logsumexp(logweights -
-                         (np.arange(t + 1) * np.log(m + eps) +
-                          (t - np.arange(t + 1)) * np.log(1 - m + eps)))
+            print('t, m:', t, m)
+        return logsumexp(logweights - np.arange(t + 1) * np.log(m + eps) - (t - np.arange(t + 1)) * np.log(1 - m + eps))
 
-    def fprime(self, mu, t, logweights, eps=0):
+    def fprime(self, m, t, logweights, eps=0):
         # derivative
-        base = logweights - np.arange(t + 1) * np.log(mu + eps) - (t - np.arange(t + 1)) * np.log(1 - mu + eps)
-        log_denom = self.f(mu, t, logweights, eps, verbose=False)
+        base = logweights - np.arange(t + 1) * np.log(m + eps) - (t - np.arange(t + 1)) * np.log(1 - m + eps)
+        log_denom = logsumexp(base)  # = self.f(m, t, logweights, eps, verbose=False)
 
-        return np.exp(logsumexp(base[:-1] + np.log(t - np.arange(t)) - np.log(1 - mu + eps)) - log_denom) - \
-               np.exp(logsumexp(base[1:] + np.log(np.arange(1, t + 1)) - np.log(mu + eps)) - log_denom)
+        return np.exp(logsumexp(base[:-1] + np.log(t - np.arange(t)) - np.log(1 - m + eps)) - log_denom) - \
+               np.exp(logsumexp(base[1:] + np.log(np.arange(1, t + 1)) - np.log(m + eps)) - log_denom)
 
     def update_logsumprod(self, logsumprod, x):
         if x == 0:
@@ -49,8 +47,7 @@ class StockInvestmentCI(ConfidenceSequence):
 
     def compute_logweights(self, t, logsumprod):
         return logsumprod + \
-               (betaln(np.arange(t + 1) + self.betas[0], t - np.arange(t + 1) + self.betas[1]) -
-                betaln(*self.betas))
+               (betaln(np.arange(t + 1) + self.betas[0], t - np.arange(t + 1) + self.betas[1]) - betaln(*self.betas))
 
     @confidence_interval
     def construct(self, delta, xs, eps=0, tol=1e-5, verbose=False, log_every=100, tqdm_=True, **kwargs):
@@ -127,6 +124,76 @@ class StockInvestmentCI(ConfidenceSequence):
                     ax.legend()
 
         return fs, fps, logweights
+
+
+class UnboundedStockInvestmentCI(StockInvestmentCI):
+    def __init__(self, betas=(1 / 2, 1 / 2)):
+        super().__init__()
+        self.betas = betas
+
+    def f(self, m, t, logweights, eps=0, verbose=False):
+        # log(wealth of UP)
+        if verbose:
+            print('t, m:', t, m)
+        return logsumexp(logweights - np.arange(t + 1) * np.log(m + eps))
+
+    def fprime(self, m, t, logweights, eps=0):
+        # derivative
+        base = logweights - np.arange(t + 1) * np.log(m + eps)
+        log_denom = logsumexp(base)  # = self.f(m, t, logweights, eps, verbose=False)
+
+        return - np.exp(logsumexp(base[1:] + np.log(np.arange(1, t + 1)) - np.log(m + eps)) - log_denom)
+
+    def update_logsumprod(self, logsumprod, x, eps=1e-5):
+        logsumprod = logsumexp([np.pad(logsumprod + np.log(x + eps), (1, 0), constant_values=(-np.inf)),
+                                np.pad(logsumprod, (0, 1), constant_values=(-np.inf))],
+                               axis=0)
+        return logsumprod
+
+    def compute_logweights(self, t, logsumprod):
+        return logsumprod + \
+               (betaln(np.arange(t + 1) + self.betas[0], t - np.arange(t + 1) + self.betas[1]) - betaln(*self.betas))
+
+
+    @confidence_interval
+    def construct(self, delta, xs, eps=0, tol=1e-5, verbose=False, log_every=100, tqdm_=True, **kwargs):
+        tqdm_ = tqdm if tqdm_ else lambda x: x
+        lower_ci = np.zeros_like(xs).astype(float)
+        upper_ci = np.ones_like(xs).astype(float)
+
+        logsumprod = np.array([0.])
+        logweights = np.array([0.])
+
+        xinit_low = 0.01
+        xinit_up = 0.99
+
+        telapsed = []
+        start = time.time()
+        for t in tqdm_(range(1, len(xs) + 1)):
+            x = xs[t - 1]
+            logsumprod = self.update_logsumprod(logsumprod, x)
+            logweights = self.compute_logweights(t, logsumprod)
+
+            if verbose:
+                # to see if log wealth(mu_hat) <= 0 always:
+                mu_hat = xs[:t].mean()
+                f_mu_hat = self.f(mu_hat, t, logweights)
+                if f_mu_hat >= 0:
+                    print("t={}, mu_hat={}, f_t(mu_hat)={}".format(t, mu_hat, f_mu_hat))
+                    print("t={}, mu_hat={}, f_t'(mu_hat)={}".format(t, mu_hat, self.fprime(mu_hat, t, logweights)))
+
+            lower_ci[t - 1] = self.find_root(delta, t, logweights,
+                                             xinit=xinit_low, xmin=0, xmax=1,
+                                             tol=tol, verbose=verbose)
+            xinit_low = lower_ci[t - 1] if not np.isnan(lower_ci[t - 1]) else 1e-6
+
+            if t % log_every == 0:
+                end = time.time()
+                telapsed.append(end - start)
+                # print(t, end=' ')
+                start = end
+
+        return lower_ci, upper_ci, telapsed, logweights
 
 
 class MultiStockInvestmentCI(ConfidenceSequence):
