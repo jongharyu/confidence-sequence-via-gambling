@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 import methods.lbup_integrand
 from methods.base import ConfidenceSequence, confidence_interval
-from methods.up import StockInvestmentCI
+from methods.up import BivariateUniversalPortfolioCS
 
 
 def logbinom(n, k):
@@ -127,7 +127,7 @@ class StitchedTruncatedGammaParams:
             return logsumexp([log_z1, log_z2])
 
 
-class LowerBoundStockInvestmentCI(ConfidenceSequence):
+class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
     def __init__(self, n,
                  sums0=0, sums_c0=0,
                  tup=0, betas=(1 / 2, 1 / 2), logweights=None,
@@ -155,7 +155,7 @@ class LowerBoundStockInvestmentCI(ConfidenceSequence):
         val = log_numer - log_denom
 
         if self.logweights is not None:
-            val += StockInvestmentCI(betas=self.betas).f(m, self.tup, self.logweights)
+            val += BivariateUniversalPortfolioCS(betas=self.betas).f(m, self.tup, self.logweights)
 
         return np.nan_to_num(val, nan=np.inf)
 

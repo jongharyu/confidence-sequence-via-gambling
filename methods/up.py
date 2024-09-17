@@ -10,7 +10,7 @@ from methods.base import ConfidenceSequence, confidence_interval
 from utils.special_functions import multibetaln
 
 
-class StockInvestmentCI(ConfidenceSequence):
+class BivariateUniversalPortfolioCS(ConfidenceSequence):
     def __init__(self, betas=(1 / 2, 1 / 2)):
         super().__init__()
         self.betas = betas
@@ -46,11 +46,12 @@ class StockInvestmentCI(ConfidenceSequence):
         return logsumprod
 
     def compute_logweights(self, t, logsumprod):
+        assert len(logsumprod) == t + 1, (t, len(logsumprod))
         return logsumprod + \
                (betaln(np.arange(t + 1) + self.betas[0], t - np.arange(t + 1) + self.betas[1]) - betaln(*self.betas))
 
     @confidence_interval
-    def construct(self, delta, xs, eps=0, tol=1e-5, verbose=False, log_every=100, tqdm_=True, **kwargs):
+    def construct(self, delta, xs, ws=None, eps=0, tol=1e-5, verbose=False, log_every=100, tqdm_=True, **kwargs):
         tqdm_ = tqdm if tqdm_ else lambda x: x
         lower_ci = np.zeros_like(xs).astype(float)
         upper_ci = np.zeros_like(xs).astype(float)
@@ -65,7 +66,7 @@ class StockInvestmentCI(ConfidenceSequence):
         start = time.time()
         for t in tqdm_(range(1, len(xs) + 1)):
             x = xs[t - 1]
-            logsumprod = self.update_logsumprod(logsumprod, x)
+            logsumprod = self.update_logsumprod(logsumprod, x) + (0. if ws is None else np.log(ws[t - 1]))
             logweights = self.compute_logweights(t, logsumprod)
 
             if verbose:
@@ -94,7 +95,7 @@ class StockInvestmentCI(ConfidenceSequence):
 
         return lower_ci, upper_ci, telapsed, logweights
 
-    def plot(self, delta, xs, every=10, ax=None, legend=False, **kwargs):
+    def plot(self, delta, xs, ws=None, every=10, ax=None, legend=False, **kwargs):
         xs = np.atleast_1d(xs.squeeze())
         if ax is None:
             fig, ax = plt.subplots(ncols=1, nrows=1)
@@ -106,7 +107,7 @@ class StockInvestmentCI(ConfidenceSequence):
         logweights = np.array([0.])
         for t in range(1, len(xs) + 1):
             x = xs[t - 1]
-            logsumprod = self.update_logsumprod(logsumprod, x)
+            logsumprod = self.update_logsumprod(logsumprod, x) + (0. if ws is None else np.log(ws[t - 1]))
             logweights = self.compute_logweights(t, logsumprod)
 
             if t % every == 0:
@@ -126,22 +127,26 @@ class StockInvestmentCI(ConfidenceSequence):
         return fs, fps, logweights
 
 
-class UnboundedStockInvestmentCI(StockInvestmentCI):
-    def __init__(self, betas=(1 / 2, 1 / 2)):
+class UnboundedUniversalPortfolioCS(BivariateUniversalPortfolioCS):
+    def __init__(self, betas=(1 / 2, 1 / 2), flip=False):
         super().__init__()
         self.betas = betas
+        self.flip = flip
 
     def f(self, m, t, logweights, eps=0, verbose=False):
         # log(wealth of UP)
         if verbose:
             print('t, m:', t, m)
+        if self.flip:
+            m = 1 - m
         return logsumexp(logweights - np.arange(t + 1) * np.log(m + eps))
 
     def fprime(self, m, t, logweights, eps=0):
+        if self.flip:
+            m = 1 - m
         # derivative
         base = logweights - np.arange(t + 1) * np.log(m + eps)
         log_denom = logsumexp(base)  # = self.f(m, t, logweights, eps, verbose=False)
-
         return - np.exp(logsumexp(base[1:] + np.log(np.arange(1, t + 1)) - np.log(m + eps)) - log_denom)
 
     def update_logsumprod(self, logsumprod, x, eps=1e-5):
@@ -196,7 +201,39 @@ class UnboundedStockInvestmentCI(StockInvestmentCI):
         return lower_ci, upper_ci, telapsed, logweights
 
 
-class MultiStockInvestmentCI(ConfidenceSequence):
+# Two-stock universal portfolio combined via average of wealths for multidim case
+class CombinedBivariateUniversalPortfolioCS:
+    def __init__(self, M=2, betas=(1 / 2, 1 / 2)):
+        self.M = M
+        self.logsumprods = [np.array([0.]) for _ in range(self.M)]
+        self.logweights = [0. for _ in range(self.M)]
+        self.ups = [BivariateUniversalPortfolioCS(betas=betas) for _ in range(self.M)]
+
+    def f(self, m, t, eps=0, verbose=False):
+        # m: (n, M)
+        log_wealth = logsumexp(np.stack([self.fbase(m[:, i], t, self.logweights[i], eps) for i in range(self.M)], axis=0), axis=0) - np.log(self.M)
+        return log_wealth
+
+    def update_logsumprods(self, t, yv):
+        for i in range(self.M):
+            self.logsumprods[i] = self.ups[i].update_logsumprod(self.logsumprods[i], yv[i])
+            self.logweights[i] = self.ups[i].compute_logweights(t, self.logsumprods[i])
+
+    def fbase(self, m, t, logweights, eps=0, verbose=False):
+        """
+        m: (n, )
+        t: int
+        logweights: (l, )
+        """
+        # log(wealth of Cover's UP)
+        if verbose:
+            print('t, m:', t, m)
+        m = m.reshape(-1, 1)  # (n, 1)
+        logweights = logweights.reshape(1, -1)  # (1, l)
+        return logsumexp(logweights - np.arange(t + 1) * np.log(m + eps) - (t - np.arange(t + 1)) * np.log(1 - m + eps), axis=-1)  # (n, )
+
+
+class MultivariateUniversalPortfolioCS(ConfidenceSequence):
     def __init__(self, M=2, betas=None):
         super().__init__()
         self.M = M

@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy.special import betaln, digamma
+from scipy.special import betaln, digamma, logsumexp
 from tqdm import tqdm
 
 from methods.base import ConfidenceSequence, confidence_interval
@@ -36,7 +36,7 @@ class CoinBettingCI(ConfidenceSequence):
 
 
 # based on discrete-coin betting + "tighter embedding"
-class HorseRaceCI(ConfidenceSequence):
+class TwoHorseRaceCI(ConfidenceSequence):
     def __init__(self, betas=(1 / 2, 1 / 2)):
         super().__init__()
         self.betas = betas
@@ -137,7 +137,47 @@ class HorseRaceCI(ConfidenceSequence):
         return fs
 
 
-class UnboundedHorseRaceCI(HorseRaceCI):
+# Two horse races combined via average of wealths for multidim case
+class CombinedTwoHorseRacesCI:
+    def __init__(self, M=2, betas=(1 / 2, 1 / 2)):
+        self.M = M
+        self.betas = np.array(betas)
+
+    def f(self, qs, ys, eps=0, only_last=False):
+        # qs: (n, M)
+        # ys: a sequence of M-dim. vectors; (M, T)
+        assert qs.shape[-1] == ys.shape[0], (qs.shape, ys.shape)
+        assert ys.shape[0] == self.M
+
+        ts = np.arange(1, ys.shape[1] + 1)  # (T, )
+        if only_last:
+            ks = ys.sum(axis=-1).reshape(-1, 1)  # (M, 1)
+            log_wealth = (logsumexp(np.stack([
+                self.fbase(qs[..., j], ts[-1:], ks[j])
+                for j in range(self.M)
+            ], axis=0), axis=0) - np.log(self.M)).reshape(-1)  # (n, )
+            return log_wealth
+        else:
+            csys = ys.cumsum(axis=-1)  # (M, T)
+            log_wealth = logsumexp(np.stack([
+                self.fbase(qs[..., j], ts, csys[j])
+                for j in range(self.M)
+                ], axis=0), axis=0) - np.log(self.M)  # (n, T)
+            return log_wealth
+
+    def fbase(self, m, t, s, eps=0):
+        # m: (n, )
+        # t: (T, )
+        # s: (T, )
+        m = m.reshape(-1, 1)  # (n, 1)
+        t = t.reshape(1, -1)  # (1, T)
+        s = s.reshape(1, -1)  # (1, T)
+        # negative log bernoulli probability with count s at time step t
+        return - s * np.log(m + eps) - (t - s) * np.log(1 - m + eps) \
+               + betaln(s + self.betas[0], t - s + self.betas[1]) - betaln(*self.betas)  # (n, T)
+
+
+class UnboundedHorseRaceCI(TwoHorseRaceCI):
     def f(self, m, t, xs, eps=0):
         cs = np.maximum.accumulate(xs)
         zs = xs / cs
@@ -182,7 +222,7 @@ class UnboundedHorseRaceCI(HorseRaceCI):
         return fs
 
 
-class TruncatedHorseRaceCI(HorseRaceCI):
+class TruncatedHorseRaceCI(TwoHorseRaceCI):
     def f(self, m, ct, t, xs, eps=0):
         zs = np.minimum(xs / ct, np.ones_like(xs))
         log_odd_term = (

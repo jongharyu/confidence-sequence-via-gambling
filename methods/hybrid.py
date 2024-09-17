@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from methods.base import ConfidenceSequence, confidence_interval
-from methods.lbup import LowerBoundStockInvestmentCI
-from methods.up import StockInvestmentCI
+from methods.lbup import LowerBoundUniversalPortfolioCS
+from methods.up import BivariateUniversalPortfolioCS
 
 
 class HybridCI(ConfidenceSequence):
@@ -20,7 +20,7 @@ class HybridCI(ConfidenceSequence):
         upper_ci = np.zeros_like(xs).astype(float)
 
         # Run UP up until self.tup round
-        lower_ci[:self.tup], upper_ci[:self.tup], telapsed_up, logweights = StockInvestmentCI(
+        lower_ci[:self.tup], upper_ci[:self.tup], telapsed_up, logweights = BivariateUniversalPortfolioCS(
             betas=self.betas).construct(
             delta, xs[:self.tup],
             eps=eps, tol=tol, verbose=verbose, log_every=log_every, do_not_apply_wor=True, **kwargs)
@@ -30,7 +30,7 @@ class HybridCI(ConfidenceSequence):
         sums_c0 = np.stack([((1 - xs[:self.tup]) ** k) for k in range(2 * self.n + 1)]).sum(axis=1)
 
         # Run LBUP from then
-        lower_ci[self.tup:], upper_ci[self.tup:], telapsed_lbup = LowerBoundStockInvestmentCI(
+        lower_ci[self.tup:], upper_ci[self.tup:], telapsed_lbup = LowerBoundUniversalPortfolioCS(
             self.n,
             sums0=sums0, sums_c0=sums_c0,
             tup=self.tup, logweights=logweights).construct(
@@ -45,14 +45,14 @@ class HybridCI(ConfidenceSequence):
         ms = np.arange(0.01, 1, 0.01)
 
         # Run UP up until self.tup round
-        *_, logweights = StockInvestmentCI(betas=self.betas).plot(
+        *_, logweights = BivariateUniversalPortfolioCS(betas=self.betas).plot(
             delta, xs[:self.tup], every, ax, legend, **kwargs)
 
         # compute cumulative sums till t=self.tup which are to be used in the prior for LBUP
         sums0 = np.stack([(xs[:self.tup] ** k) for k in range(2 * self.n + 1)]).sum(axis=1)
         sums_c0 = np.stack([((1 - xs[:self.tup]) ** k) for k in range(2 * self.n + 1)]).sum(axis=1)
 
-        lbup = LowerBoundStockInvestmentCI(
+        lbup = LowerBoundUniversalPortfolioCS(
             self.n,
             sums0=sums0, sums_c0=sums_c0,
             tup=self.tup, logweights=logweights)
