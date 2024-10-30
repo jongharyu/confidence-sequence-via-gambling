@@ -10,7 +10,7 @@ from utils.special_functions import binary_entropy, multibetaln
 
 
 # based on discrete-coin betting + "naive embedding"
-class CoinBettingCI(ConfidenceSequence):
+class CoinBettingCS(ConfidenceSequence):
     def __init__(self):
         super().__init__()
 
@@ -36,7 +36,7 @@ class CoinBettingCI(ConfidenceSequence):
 
 
 # based on discrete-coin betting + "tighter embedding"
-class TwoHorseRaceCI(ConfidenceSequence):
+class TwoHorseRaceCS(ConfidenceSequence):
     def __init__(self, betas=(1 / 2, 1 / 2)):
         super().__init__()
         self.betas = betas
@@ -138,7 +138,7 @@ class TwoHorseRaceCI(ConfidenceSequence):
 
 
 # Two horse races combined via average of wealths for multidim case
-class CombinedTwoHorseRacesCI:
+class CombinedTwoHorseRacesCS:
     def __init__(self, M=2, betas=(1 / 2, 1 / 2)):
         self.M = M
         self.betas = np.array(betas)
@@ -177,7 +177,7 @@ class CombinedTwoHorseRacesCI:
                + betaln(s + self.betas[0], t - s + self.betas[1]) - betaln(*self.betas)  # (n, T)
 
 
-class UnboundedHorseRaceCI(TwoHorseRaceCI):
+class UnboundedHorseRaceCS(TwoHorseRaceCS):
     def f(self, m, t, xs, eps=0):
         cs = np.maximum.accumulate(xs)
         zs = xs / cs
@@ -185,9 +185,10 @@ class UnboundedHorseRaceCI(TwoHorseRaceCI):
                 zs * np.nan_to_num(np.log(np.float64(1.) / (m / cs)), nan=0., posinf=0.) +
                 (1 - zs) * np.nan_to_num(np.log(np.float64(1.) / (1 - np.minimum(m / cs, np.ones_like(xs)))), nan=0., posinf=0.)
         ).sum()
-        log_prob = betaln(zs.sum() + self.betas[0],
-                          (1 - zs).sum() + self.betas[1]) - \
-                   betaln(*self.betas)
+        log_prob = betaln(
+            zs.sum() + self.betas[0],
+            (1 - zs).sum() + self.betas[1]
+        ) - betaln(*self.betas)
 
         return log_odd_term + log_prob
 
@@ -222,7 +223,7 @@ class UnboundedHorseRaceCI(TwoHorseRaceCI):
         return fs
 
 
-class TruncatedHorseRaceCI(TwoHorseRaceCI):
+class TruncatedHorseRaceCS(TwoHorseRaceCS):
     def f(self, m, ct, t, xs, eps=0):
         zs = np.minimum(xs / ct, np.ones_like(xs))
         log_odd_term = (

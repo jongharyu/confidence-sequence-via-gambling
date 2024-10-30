@@ -40,9 +40,17 @@ class ConfidenceSequence:
         return mu_hats
 
     # root finding
-    def find_root(self, delta, *args,
-                  xmin=-np.inf, xmax=np.inf, xinit=-1,
-                  maxiter=100, tol=1e-5, verbose=False):
+    def find_root(
+        self,
+        delta,
+        *args,
+        xmin=-np.inf,
+        xmax=np.inf,
+        xinit=-1,
+        maxiter=100,
+        tol=1e-5,
+        verbose=False
+    ):
         assert np.all(xmin > -np.inf) and np.all(xmax < np.inf)
 
         def f(x):
@@ -74,10 +82,15 @@ class ConfidenceSequence:
 
         return fsolve(f, x0=xinit)
 
-    def find_root_bisect(self, delta, *args,
-                         xinits,
-                         tol=1e-5,
-                         maxiter=16, verbose=False):
+    def find_root_bisect(
+        self,
+        delta,
+        *args,
+        xinits,
+        tol=1e-5,
+        maxiter=16,
+        verbose=False
+    ):
         def f(x):
             return self.f(x, *args) - np.log(1 / delta)
 

@@ -7,9 +7,9 @@ import scipy.integrate as integrate
 from scipy.special import binom, logsumexp, gammaln, gammainc
 from tqdm import tqdm
 
-import methods.lbup_integrand
+import methods.lbup_integrand as lbup_integrand
 from methods.base import ConfidenceSequence, confidence_interval
-from methods.up import BivariateUniversalPortfolioCS
+from methods.up import UniversalPortfolioCS, UnboundedUniversalPortfolioCS
 
 
 def logbinom(n, k):
@@ -53,7 +53,7 @@ class TruncatedGamma:
             if self.use_cython:
                 # Turn the Cython C function into a LowLevelCallable
                 # using Cython seems ~33% faster!
-                phi = scipy.LowLevelCallable.from_cython(methods.lbup_integrand, 'phi')
+                phi = scipy.LowLevelCallable.from_cython(lbup_integrand, 'phi')
                 args = (self.n, *self.rhos, self.eta)
             else:
                 phi = lambda x: np.exp(self.log_phi(x))
@@ -108,8 +108,10 @@ class StitchedTruncatedGamma:
         log_z2 = self.tg2.log_z
         log_z1 = self.tg1.log_z
         # print((np.log(self.m), log_z2), (np.log(1 - self.m), log_z1))
-        return logsumexp([log_z2 + np.log(self.m),
-                          log_z1 + np.log(1 - self.m)])
+        return logsumexp([
+            log_z2 + np.log(self.m),
+            log_z1 + np.log(1 - self.m)
+        ])
 
 
 class StitchedTruncatedGammaParams:
@@ -128,10 +130,16 @@ class StitchedTruncatedGammaParams:
 
 
 class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
-    def __init__(self, n,
-                 sums0=0, sums_c0=0,
-                 tup=0, betas=(1 / 2, 1 / 2), logweights=None,
-                 use_cython=True):
+    def __init__(
+        self,
+        n,
+        sums0=0,
+        sums_c0=0,
+        tup=0,
+        betas=(1 / 2, 1 / 2),
+        logweights=None,
+        use_cython=True
+    ):
         super().__init__()
         self.n = n
         self.use_cython = use_cython
@@ -148,14 +156,18 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
 
     def f(self, m, sums, sums_c, verbose=False):
         # f(m, st, sst) = log((Z1t + Z2t) / (Z10 + Z20))
-        log_numer = logsumexp([self.tg_params.compute_log_z(m, sums + self.sums0),
-                               self.tg_params.compute_log_z(1 - m, sums_c + self.sums_c0)])
-        log_denom = logsumexp([self.tg_params.compute_log_z(m, self.sums0),
-                               self.tg_params.compute_log_z(1 - m, self.sums_c0)])
+        log_numer = logsumexp([
+            self.tg_params.compute_log_z(m, sums + self.sums0),
+            self.tg_params.compute_log_z(1 - m, sums_c + self.sums_c0)
+        ])
+        log_denom = logsumexp([
+            self.tg_params.compute_log_z(m, self.sums0),
+            self.tg_params.compute_log_z(1 - m, self.sums_c0)
+        ])
         val = log_numer - log_denom
 
         if self.logweights is not None:
-            val += BivariateUniversalPortfolioCS(betas=self.betas).f(m, self.tup, self.logweights)
+            val += UniversalPortfolioCS(betas=self.betas).f(m, self.tup, self.logweights)
 
         return np.nan_to_num(val, nan=np.inf)
 
@@ -178,19 +190,30 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
             mu_hat = (sums[t - 1, 1] + self.sums0[1]) / (sums[t - 1, 0] + self.sums0[0])
 
             # use scipy's fsolve (somehow doesn't work properly)
-            # lower_ci[t - 1] = self.find_root_fsolve(sums[t - 1], sums_c[t - 1],
-            #                                         xinit=(lower_ci[t - 2] + mu_hat) / 2)
-            # upper_ci[t - 1] = self.find_root_fsolve(sums[t - 1], sums_c[t - 1],
-            #                                         xinit=(upper_ci[t - 2] + mu_hat) / 2)
+            # lower_ci[t - 1] = self.find_root_fsolve(
+            #     sums[t - 1],
+            #     sums_c[t - 1],
+            #     xinit=(lower_ci[t - 2] + mu_hat) / 2
+            # )
+            # upper_ci[t - 1] = self.find_root_fsolve(
+            #     sums[t - 1],
+            #     sums_c[t - 1],
+            #     xinit=(upper_ci[t - 2] + mu_hat) / 2
+            # )
 
             # use scipy's bisect with a customized initialization rule
             xinit_low = lower_ci[t - 2] if t > 1 else eps
             if self.f(xinit_low, sums[t - 1], sums_c[t - 1]) < np.log(1 / delta):
                 lower_ci[t - 1] = xinit_low
             else:
-                lower_ci[t - 1] = self.find_root_bisect(delta, sums[t - 1], sums_c[t - 1],
-                                                        xinits=(xinit_low, mu_hat),
-                                                        tol=tol, verbose=verbose)
+                lower_ci[t - 1] = self.find_root_bisect(
+                    delta,
+                    sums[t - 1],
+                    sums_c[t - 1],
+                    xinits=(xinit_low, mu_hat),
+                    tol=tol,
+                    verbose=verbose
+                )
                 if lower_ci[t - 1] == -1 or np.isnan(lower_ci[t - 1]):
                     print("bisect encounters ValueError!")
                     lower_ci[t - 1] = lower_ci[t - 2]
@@ -199,9 +222,14 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
             if self.f(xinit_up, sums[t - 1], sums_c[t - 1]) < np.log(1 / delta):
                 upper_ci[t - 1] = xinit_up
             else:
-                upper_ci[t - 1] = self.find_root_bisect(delta, sums[t - 1], sums_c[t - 1],
-                                                        xinits=(mu_hat, xinit_up),
-                                                        tol=tol, verbose=verbose)
+                upper_ci[t - 1] = self.find_root_bisect(
+                    delta,
+                    sums[t - 1],
+                    sums_c[t - 1],
+                    xinits=(mu_hat, xinit_up),
+                    tol=tol,
+                    verbose=verbose
+                )
                 if upper_ci[t - 1] == -1 or np.isnan(upper_ci[t - 1]):
                     print("bisect encounters ValueError!")
                     upper_ci[t - 1] = upper_ci[t - 2]
@@ -231,7 +259,113 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
                     fs[i] = self.f(m, sums[t - 1], sums_c[t - 1])
                 if 'label' not in kwargs:
                     kwargs['label'] = 'LBUP'
-                kwargs['label'] += ' (n={})'.format(self.n, t)
+                kwargs['label'] += f' (n={self.n})'
+                ax.plot(ms, fs, **kwargs)
+                ax.axhline(np.log(1 / delta), linestyle='--')
+                if legend:
+                    ax.legend()
+
+        return fs
+
+
+class UnboundedLowerBoundUniversalPortfolioCS(ConfidenceSequence):
+    def __init__(
+        self,
+        n,
+        sums0=0,
+        tup=0,
+        betas=(1 / 2, 1 / 2),
+        logweights=None,
+        use_cython=True
+    ):
+        super().__init__()
+        self.n = n
+        self.use_cython = use_cython
+        self.tg_params = TruncatedGammaParams(self.n, self.use_cython)
+
+        # for rhos and eta for a prior
+        self.sums0 = sums0 if not isinstance(sums0, int) else np.zeros(2 * self.n + 1)
+
+        # for piggybacking UP (these are used in HybridUP)
+        self.tup = tup
+        self.betas = betas
+        self.logweights = logweights
+
+    def f(self, m, sums, verbose=False):
+        # f(m, st, sst) = log(Zt / Z0)
+        log_numer = self.tg_params.compute_log_z(m, sums + self.sums0)
+        log_denom = self.tg_params.compute_log_z(m, self.sums0)
+        val = log_numer - log_denom
+
+        if self.logweights is not None:
+            val += UnboundedUniversalPortfolioCS(betas=self.betas).f(m, self.tup, self.logweights)
+
+        return np.nan_to_num(val, nan=np.inf)
+
+    def fprime(self, x, *args):
+        raise NotImplementedError
+
+    @confidence_interval
+    def construct(self, delta, xs, tol=1e-5, eps=1e-5, verbose=False, log_every=100, **kwargs):
+        # Note: if eps is too small, then due to numerical instability of the definite integrals,
+        #       the behavior may be erratic
+        lower_ci = np.zeros_like(xs).astype(float)
+        upper_ci = np.ones_like(xs).astype(float)
+
+        sums = np.stack([(xs ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
+
+        telapsed = []
+        start = time.time()
+        for t in tqdm(range(1, len(xs) + 1)):
+            mu_hat = (sums[t - 1, 1] + self.sums0[1]) / (sums[t - 1, 0] + self.sums0[0])
+
+            # use scipy's fsolve (somehow doesn't work properly)
+            # lower_ci[t - 1] = self.find_root_fsolve(
+            #     sums[t - 1],
+            #     sums_c[t - 1],
+            #     xinit=(lower_ci[t - 2] + mu_hat) / 2
+            # )
+            # upper_ci[t - 1] = self.find_root_fsolve(
+            #     sums[t - 1],
+            #     sums_c[t - 1],
+            #     xinit=(upper_ci[t - 2] + mu_hat) / 2
+            # )
+
+            # use scipy's bisect with a customized initialization rule
+            xinit_low = lower_ci[t - 2] if t > 1 else eps
+            if self.f(xinit_low, sums[t - 1]) < np.log(1 / delta):
+                lower_ci[t - 1] = xinit_low
+            else:
+                lower_ci[t - 1] = self.find_root_bisect(
+                    delta,
+                    sums[t - 1],
+                    xinits=(xinit_low, mu_hat),
+                    tol=tol,
+                    verbose=verbose
+                )
+                if lower_ci[t - 1] == -1 or np.isnan(lower_ci[t - 1]):
+                    print("bisect encounters ValueError!")
+                    lower_ci[t - 1] = lower_ci[t - 2]
+
+        return lower_ci, upper_ci, telapsed
+
+    def plot(self, delta, xs, every=10, ax=None, legend=False, **kwargs):
+        if ax is None:
+            fig, ax = plt.subplots(ncols=1, nrows=1)
+        ms = np.arange(0.01, 1, 0.01)
+
+        sums = np.stack([(xs ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
+
+        fs = []
+        for t in range(1, len(xs) + 1):
+            if (t + self.tup) % every == 0:
+                print(t + self.tup)
+                fs = np.zeros_like(ms)
+                for i, m in enumerate(ms):
+                    fs[i] = self.f(m, sums[t - 1])
+                if 'label' not in kwargs:
+                    kwargs['label'] = 'LBUP'
+                kwargs['label'] += f' (n={self.n})'
                 ax.plot(ms, fs, **kwargs)
                 ax.axhline(np.log(1 / delta), linestyle='--')
                 if legend:

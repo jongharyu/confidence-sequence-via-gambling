@@ -10,7 +10,7 @@ from methods.base import ConfidenceSequence, confidence_interval
 from utils.special_functions import multibetaln
 
 
-class BivariateUniversalPortfolioCS(ConfidenceSequence):
+class UniversalPortfolioCS(ConfidenceSequence):
     def __init__(self, betas=(1 / 2, 1 / 2)):
         super().__init__()
         self.betas = betas
@@ -29,19 +29,45 @@ class BivariateUniversalPortfolioCS(ConfidenceSequence):
         return np.exp(logsumexp(base[:-1] + np.log(t - np.arange(t)) - np.log(1 - m + eps)) - log_denom) - \
                np.exp(logsumexp(base[1:] + np.log(np.arange(1, t + 1)) - np.log(m + eps)) - log_denom)
 
+    # def update_logsumprod(self, logsumprod, x):
+    #     if x == 0:
+    #         logsumprod = logsumexp([np.pad(-np.inf * np.ones_like(logsumprod), (1, 0), constant_values=(-np.inf)),
+    #                                 np.pad(logsumprod, (0, 1), constant_values=(-np.inf))],
+    #                                axis=0)
+    #     elif x == 1:
+    #         logsumprod = logsumexp([np.pad(logsumprod, (1, 0), constant_values=(-np.inf)),
+    #                                 np.pad(-np.inf * np.ones_like(logsumprod), (0, 1), constant_values=(-np.inf))],
+    #                                axis=0)
+    #     else:
+    #         logsumprod = logsumexp([np.pad(logsumprod + np.log(x), (1, 0), constant_values=(-np.inf)),
+    #                                 np.pad(logsumprod + np.log(1 - x), (0, 1), constant_values=(-np.inf))],
+    #                                axis=0)
+    #
+    #     return logsumprod
+
     def update_logsumprod(self, logsumprod, x):
+        padded_shape = (len(logsumprod) + 1,)
+        neg_inf_array = -np.inf * np.ones(padded_shape)
+
         if x == 0:
-            logsumprod = logsumexp([np.pad(-np.inf * np.ones_like(logsumprod), (1, 0), constant_values=(-np.inf)),
-                                    np.pad(logsumprod, (0, 1), constant_values=(-np.inf))],
-                                   axis=0)
+            arr1 = neg_inf_array.copy()
+            arr1[1:] = logsumprod
+            arr2 = neg_inf_array.copy()
+            arr2[:-1] = logsumprod
         elif x == 1:
-            logsumprod = logsumexp([np.pad(logsumprod, (1, 0), constant_values=(-np.inf)),
-                                    np.pad(-np.inf * np.ones_like(logsumprod), (0, 1), constant_values=(-np.inf))],
-                                   axis=0)
+            arr1 = neg_inf_array.copy()
+            arr1[1:] = logsumprod
+            arr2 = neg_inf_array.copy()
+            arr2[:-1] = logsumprod
         else:
-            logsumprod = logsumexp([np.pad(logsumprod + np.log(x), (1, 0), constant_values=(-np.inf)),
-                                    np.pad(logsumprod + np.log(1 - x), (0, 1), constant_values=(-np.inf))],
-                                   axis=0)
+            log_x = np.log(x)
+            log_1_minus_x = np.log(1 - x)
+            arr1 = neg_inf_array.copy()
+            arr1[1:] = logsumprod + log_x
+            arr2 = neg_inf_array.copy()
+            arr2[:-1] = logsumprod + log_1_minus_x
+
+        logsumprod = logsumexp([arr1, arr2], axis=0)
 
         return logsumprod
 
@@ -77,12 +103,26 @@ class BivariateUniversalPortfolioCS(ConfidenceSequence):
                     print("t={}, mu_hat={}, f_t(mu_hat)={}".format(t, mu_hat, f_mu_hat))
                     print("t={}, mu_hat={}, f_t'(mu_hat)={}".format(t, mu_hat, self.fprime(mu_hat, t, logweights)))
 
-            lower_ci[t - 1] = self.find_root(delta, t, logweights,
-                                             xinit=xinit_low, xmin=0, xmax=1,
-                                             tol=tol, verbose=verbose)
-            upper_ci[t - 1] = self.find_root(delta, t, logweights,
-                                             xinit=xinit_up, xmin=0, xmax=1,
-                                             tol=tol, verbose=verbose)
+            lower_ci[t - 1] = self.find_root(
+                delta,
+                t,
+                logweights,
+                xinit=xinit_low,
+                xmin=0,
+                xmax=1,
+                tol=tol,
+                verbose=verbose
+            )
+            upper_ci[t - 1] = self.find_root(
+                delta,
+                t,
+                logweights,
+                xinit=xinit_up,
+                xmin=0,
+                xmax=1,
+                tol=tol,
+                verbose=verbose
+            )
 
             xinit_low = lower_ci[t - 1] if not np.isnan(lower_ci[t - 1]) else 1e-6
             xinit_up = upper_ci[t - 1] if not np.isnan(upper_ci[t - 1]) else 1 - 1e-6
@@ -127,7 +167,19 @@ class BivariateUniversalPortfolioCS(ConfidenceSequence):
         return fs, fps, logweights
 
 
-class UnboundedUniversalPortfolioCS(BivariateUniversalPortfolioCS):
+class ConstantlyRebalancingPortfolioCS(UniversalPortfolioCS):
+    def __init__(self, b=.5):
+        super().__init__()
+        self.b = b  # CRP constant
+
+    def compute_logweights(self, t, logsumprod):
+        assert len(logsumprod) == t + 1, (t, len(logsumprod))
+        
+        return logsumprod + \
+               (np.arange(t + 1) * np.log(self.b) + (t - np.arange(t + 1)) * np.log(1 - self.b))
+
+
+class UnboundedUniversalPortfolioCS(UniversalPortfolioCS):
     def __init__(self, betas=(1 / 2, 1 / 2), flip=False):
         super().__init__()
         self.betas = betas
@@ -149,16 +201,32 @@ class UnboundedUniversalPortfolioCS(BivariateUniversalPortfolioCS):
         log_denom = logsumexp(base)  # = self.f(m, t, logweights, eps, verbose=False)
         return - np.exp(logsumexp(base[1:] + np.log(np.arange(1, t + 1)) - np.log(m + eps)) - log_denom)
 
+    # def update_logsumprod(self, logsumprod, x, eps=1e-5):
+    #     logsumprod = logsumexp([np.pad(logsumprod + np.log(x + eps), (1, 0), constant_values=(-np.inf)),
+    #                             np.pad(logsumprod, (0, 1), constant_values=(-np.inf))],
+    #                            axis=0)
+    #     return logsumprod
+
     def update_logsumprod(self, logsumprod, x, eps=1e-5):
-        logsumprod = logsumexp([np.pad(logsumprod + np.log(x + eps), (1, 0), constant_values=(-np.inf)),
-                                np.pad(logsumprod, (0, 1), constant_values=(-np.inf))],
-                               axis=0)
+        padded_shape = (len(logsumprod) + 1,)
+        neg_inf_array = -np.inf * np.ones(padded_shape)
+
+        # Precompute log(x + eps) once
+        log_x_eps = np.log(x + eps)
+
+        # Directly assign values to avoid padding
+        arr1 = neg_inf_array.copy()
+        arr1[1:] = logsumprod + log_x_eps
+        arr2 = neg_inf_array.copy()
+        arr2[:-1] = logsumprod
+
+        logsumprod = logsumexp([arr1, arr2], axis=0)
+
         return logsumprod
 
     def compute_logweights(self, t, logsumprod):
         return logsumprod + \
                (betaln(np.arange(t + 1) + self.betas[0], t - np.arange(t + 1) + self.betas[1]) - betaln(*self.betas))
-
 
     @confidence_interval
     def construct(self, delta, xs, eps=0, tol=1e-5, verbose=False, log_every=100, tqdm_=True, **kwargs):
@@ -187,9 +255,16 @@ class UnboundedUniversalPortfolioCS(BivariateUniversalPortfolioCS):
                     print("t={}, mu_hat={}, f_t(mu_hat)={}".format(t, mu_hat, f_mu_hat))
                     print("t={}, mu_hat={}, f_t'(mu_hat)={}".format(t, mu_hat, self.fprime(mu_hat, t, logweights)))
 
-            lower_ci[t - 1] = self.find_root(delta, t, logweights,
-                                             xinit=xinit_low, xmin=0, xmax=1,
-                                             tol=tol, verbose=verbose)
+            lower_ci[t - 1] = self.find_root(
+                delta,
+                t,
+                logweights,
+                xinit=xinit_low,
+                xmin=0,
+                xmax=1,
+                tol=tol,
+                verbose=verbose
+            )
             xinit_low = lower_ci[t - 1] if not np.isnan(lower_ci[t - 1]) else 1e-6
 
             if t % log_every == 0:
@@ -202,12 +277,12 @@ class UnboundedUniversalPortfolioCS(BivariateUniversalPortfolioCS):
 
 
 # Two-stock universal portfolio combined via average of wealths for multidim case
-class CombinedBivariateUniversalPortfolioCS:
+class CombinedUniversalPortfolioCS:
     def __init__(self, M=2, betas=(1 / 2, 1 / 2)):
         self.M = M
         self.logsumprods = [np.array([0.]) for _ in range(self.M)]
         self.logweights = [0. for _ in range(self.M)]
-        self.ups = [BivariateUniversalPortfolioCS(betas=betas) for _ in range(self.M)]
+        self.ups = [UniversalPortfolioCS(betas=betas) for _ in range(self.M)]
 
     def f(self, m, t, eps=0, verbose=False):
         # m: (n, M)
