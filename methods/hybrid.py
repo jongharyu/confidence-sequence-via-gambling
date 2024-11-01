@@ -98,7 +98,7 @@ class HybridUniversalPortfolioCS(ConfidenceSequence):
                     fs[i] = lbup.f(m, sums[t - self.tup - 1], sums_c[t - self.tup - 1])
                 if 'label' not in kwargs:
                     kwargs['label'] = 'HybridUP'
-                kwargs['label'] += f' (order={n}; t={t})'
+                kwargs['label'] += f' (order={self.n}; t={t})'
                 ax.plot(ms, fs, **kwargs)
                 ax.axhline(np.log(1 / delta), linestyle='--')
                 ax.axvline(x=mu_hat)
@@ -188,7 +188,7 @@ class UnboundedHybridUniversalPortfolioCS(ConfidenceSequence):
                     fs[i] = lbup.f(m, sums[t - self.tup - 1])
                 if 'label' not in kwargs:
                     kwargs['label'] = 'UnboundedHybridUP'
-                kwargs['label'] += f' (order={n}; t={t})'
+                kwargs['label'] += f' (order={self.n}; t={t})'
                 ax.plot(ms, fs, **kwargs)
                 ax.axhline(np.log(1 / delta), linestyle='--')
                 ax.axvline(x=mu_hat)
