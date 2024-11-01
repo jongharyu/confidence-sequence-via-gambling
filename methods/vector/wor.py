@@ -1,11 +1,10 @@
 import numpy as np
 
-from methods.base import ConfidenceSequence
 from utils.special_functions import multibetaln, multinomln
 
 
 # for fixed number of balls
-class MultiWoRCI(ConfidenceSequence):
+class MultiWoRCI:
     def __init__(self, N, betas=(1 / 2, 1 / 2)):
         super().__init__()
         self.N = N  # total number of balls
