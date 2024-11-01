@@ -2,12 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from methods.base import ConfidenceSequence, confidence_interval
-from methods.lbup import (
+from methods.scalar.base import ConfidenceSequence, confidence_interval
+from methods.scalar.lbup import (
     LowerBoundUniversalPortfolioCS,
     UnboundedLowerBoundUniversalPortfolioCS,
 )
-from methods.up import UniversalPortfolioCS, UnboundedUniversalPortfolioCS
+from methods.scalar.up import UniversalPortfolioCS, UnboundedUniversalPortfolioCS
 
 
 class HybridUniversalPortfolioCS(ConfidenceSequence):

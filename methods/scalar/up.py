@@ -6,7 +6,7 @@ import numpy as np
 from scipy.special import betaln, logsumexp
 from tqdm import tqdm
 
-from methods.base import ConfidenceSequence, confidence_interval
+from methods.scalar.base import ConfidenceSequence, confidence_interval
 from utils.special_functions import multibetaln
 
 

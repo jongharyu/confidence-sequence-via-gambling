@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from scipy.special import betaln, digamma, logsumexp
 from tqdm import tqdm
 
-from methods.base import ConfidenceSequence, confidence_interval
+from methods.scalar.base import ConfidenceSequence, confidence_interval
 from utils.special_functions import binary_entropy, multibetaln
 
 

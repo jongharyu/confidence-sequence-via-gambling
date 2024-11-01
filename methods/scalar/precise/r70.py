@@ -3,8 +3,8 @@ import time
 import numpy as np
 from tqdm import tqdm
 
-from methods.base import ConfidenceSequence, confidence_interval
-from methods.precise.utils import newton_1d_bnd
+from methods.scalar.base import ConfidenceSequence, confidence_interval
+from methods.scalar.precise.utils import newton_1d_bnd
 
 
 class PRECiSE_R70(ConfidenceSequence):

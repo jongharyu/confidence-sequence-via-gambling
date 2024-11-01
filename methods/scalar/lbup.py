@@ -8,8 +8,8 @@ from scipy.special import binom, logsumexp, gammaln, gammainc
 from tqdm import tqdm
 
 import methods.lbup_integrand as lbup_integrand
-from methods.base import ConfidenceSequence, confidence_interval
-from methods.up import UniversalPortfolioCS, UnboundedUniversalPortfolioCS
+from methods.scalar.base import ConfidenceSequence, confidence_interval
+from methods.scalar.up import UniversalPortfolioCS, UnboundedUniversalPortfolioCS
 
 
 def logbinom(n, k):

@@ -4,7 +4,7 @@ import numpy as np
 from scipy.special import gammaln
 from tqdm import tqdm
 
-from methods.base import ConfidenceSequence, confidence_interval
+from methods.scalar.base import ConfidenceSequence, confidence_interval
 
 
 def max_logwealth_fan3_lcb(m, mu_hat, var_hat, t):
