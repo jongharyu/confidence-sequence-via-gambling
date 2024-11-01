@@ -31,29 +31,33 @@ class TruncatedGamma:
 
     def log_phi(self, x):
         assert 0 <= x <= 1
-        return (np.sum([self.rhos[k - 1] * ((1 - x) ** k) / k
-                        for k in range(1, 2 * self.n)])
-                + self.eta * np.log(x))
+        return np.sum(
+            [self.rhos[k - 1] * ((1 - x) ** k) / k for k in range(1, 2 * self.n)]
+        ) + self.eta * np.log(x)
 
     @property
     def log_z(self):
         if self.n == 1:
             # log{Z(rho, eta)}
             if self.rhos[0] > 0:
-                return (self.rhos[0]
-                        - (self.eta + 1) * np.log(self.rhos[0] + self.eps)
-                        + gammaln(self.eta + 1)
-                        + np.log(gammainc(self.eta + 1, self.rhos[0] + self.eps)))
+                return (
+                    self.rhos[0]
+                    - (self.eta + 1) * np.log(self.rhos[0] + self.eps)
+                    + gammaln(self.eta + 1)
+                    + np.log(gammainc(self.eta + 1, self.rhos[0] + self.eps))
+                )
             elif self.rhos[0] == 0:
-                return - np.log(self.eta + 1)
+                return -np.log(self.eta + 1)
             else:
-                return np.log(integrate.quad(lambda x: np.exp(self.log_phi(x)), 0, 1)[0])
+                return np.log(
+                    integrate.quad(lambda x: np.exp(self.log_phi(x)), 0, 1)[0]
+                )
         else:
             # log{Z(rhos, eta)}
             if self.use_cython:
                 # Turn the Cython C function into a LowLevelCallable
                 # using Cython seems ~33% faster!
-                phi = scipy.LowLevelCallable.from_cython(lbup_integrand, 'phi')
+                phi = scipy.LowLevelCallable.from_cython(lbup_integrand, "phi")
                 args = (self.n, *self.rhos, self.eta)
             else:
                 phi = lambda x: np.exp(self.log_phi(x))
@@ -72,9 +76,20 @@ class TruncatedGammaParams:
 
     @staticmethod
     def g(m, k, sums):
-        log_even = logsumexp([logbinom(k, j) + np.log(sums[j]) - j * np.log(m) for j in range(0, k + 1, 2)])
-        log_odd = logsumexp([logbinom(k, j) + np.log(sums[j]) - j * np.log(m) for j in range(1, k + 1, 2)])
+        log_even = logsumexp(
+            [
+                logbinom(k, j) + np.log(sums[j]) - j * np.log(m)
+                for j in range(0, k + 1, 2)
+            ]
+        )
+        log_odd = logsumexp(
+            [
+                logbinom(k, j) + np.log(sums[j]) - j * np.log(m)
+                for j in range(1, k + 1, 2)
+            ]
+        )
         return np.exp(log_even) - np.exp(log_odd)
+
     #         return np.sum([binom(k, j) * sums[j] / ((-m) ** j) for j in range(k + 1)])
 
     def compute_params(self, m, sums):
@@ -108,10 +123,7 @@ class StitchedTruncatedGamma:
         log_z2 = self.tg2.log_z
         log_z1 = self.tg1.log_z
         # print((np.log(self.m), log_z2), (np.log(1 - self.m), log_z1))
-        return logsumexp([
-            log_z2 + np.log(self.m),
-            log_z1 + np.log(1 - self.m)
-        ])
+        return logsumexp([log_z2 + np.log(self.m), log_z1 + np.log(1 - self.m)])
 
 
 class StitchedTruncatedGammaParams:
@@ -138,7 +150,7 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
         tup=0,
         betas=(1 / 2, 1 / 2),
         logweights=None,
-        use_cython=True
+        use_cython=True,
     ):
         super().__init__()
         self.n = n
@@ -147,7 +159,9 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
 
         # for rhos and eta for a prior
         self.sums0 = sums0 if not isinstance(sums0, int) else np.zeros(2 * self.n + 1)
-        self.sums_c0 = sums_c0 if not isinstance(sums_c0, int) else np.zeros(2 * self.n + 1)
+        self.sums_c0 = (
+            sums_c0 if not isinstance(sums_c0, int) else np.zeros(2 * self.n + 1)
+        )
 
         # for piggybacking UP (these are used in HybridUP)
         self.tup = tup
@@ -156,18 +170,24 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
 
     def f(self, m, sums, sums_c, verbose=False):
         # f(m, st, sst) = log((Z1t + Z2t) / (Z10 + Z20))
-        log_numer = logsumexp([
-            self.tg_params.compute_log_z(m, sums + self.sums0),
-            self.tg_params.compute_log_z(1 - m, sums_c + self.sums_c0)
-        ])
-        log_denom = logsumexp([
-            self.tg_params.compute_log_z(m, self.sums0),
-            self.tg_params.compute_log_z(1 - m, self.sums_c0)
-        ])
+        log_numer = logsumexp(
+            [
+                self.tg_params.compute_log_z(m, sums + self.sums0),
+                self.tg_params.compute_log_z(1 - m, sums_c + self.sums_c0),
+            ]
+        )
+        log_denom = logsumexp(
+            [
+                self.tg_params.compute_log_z(m, self.sums0),
+                self.tg_params.compute_log_z(1 - m, self.sums_c0),
+            ]
+        )
         val = log_numer - log_denom
 
         if self.logweights is not None:
-            val += UniversalPortfolioCS(betas=self.betas).f(m, self.tup, self.logweights)
+            val += UniversalPortfolioCS(betas=self.betas).f(
+                m, self.tup, self.logweights
+            )
 
         return np.nan_to_num(val, nan=np.inf)
 
@@ -175,14 +195,20 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
         raise NotImplementedError
 
     @confidence_interval
-    def construct(self, delta, xs, tol=1e-5, eps=1e-5, verbose=False, log_every=100, **kwargs):
+    def construct(
+        self, delta, xs, tol=1e-5, eps=1e-5, verbose=False, log_every=100, **kwargs
+    ):
         # Note: if eps is too small, then due to numerical instability of the definite integrals,
         #       the behavior may be erratic
         lower_ci = np.zeros_like(xs).astype(float)
         upper_ci = np.ones_like(xs).astype(float)
 
-        sums = np.stack([(xs ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
-        sums_c = np.stack([((1 - xs) ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
+        sums = (
+            np.stack([(xs**k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T
+        )  # (T, 2 * n + 1)
+        sums_c = (
+            np.stack([((1 - xs) ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T
+        )  # (T, 2 * n + 1)
 
         telapsed = []
         start = time.time()
@@ -212,7 +238,7 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
                     sums_c[t - 1],
                     xinits=(xinit_low, mu_hat),
                     tol=tol,
-                    verbose=verbose
+                    verbose=verbose,
                 )
                 if lower_ci[t - 1] == -1 or np.isnan(lower_ci[t - 1]):
                     print("bisect encounters ValueError!")
@@ -228,7 +254,7 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
                     sums_c[t - 1],
                     xinits=(mu_hat, xinit_up),
                     tol=tol,
-                    verbose=verbose
+                    verbose=verbose,
                 )
                 if upper_ci[t - 1] == -1 or np.isnan(upper_ci[t - 1]):
                     print("bisect encounters ValueError!")
@@ -247,8 +273,12 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
             fig, ax = plt.subplots(ncols=1, nrows=1)
         ms = np.arange(0.01, 1, 0.01)
 
-        sums = np.stack([(xs ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
-        sums_c = np.stack([((1 - xs) ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
+        sums = (
+            np.stack([(xs**k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T
+        )  # (T, 2 * n + 1)
+        sums_c = (
+            np.stack([((1 - xs) ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T
+        )  # (T, 2 * n + 1)
 
         fs = []
         for t in range(1, len(xs) + 1):
@@ -257,11 +287,11 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
                 fs = np.zeros_like(ms)
                 for i, m in enumerate(ms):
                     fs[i] = self.f(m, sums[t - 1], sums_c[t - 1])
-                if 'label' not in kwargs:
-                    kwargs['label'] = 'LBUP'
-                kwargs['label'] += f' (n={self.n})'
+                if "label" not in kwargs:
+                    kwargs["label"] = "LBUP"
+                kwargs["label"] += f" (n={self.n})"
                 ax.plot(ms, fs, **kwargs)
-                ax.axhline(np.log(1 / delta), linestyle='--')
+                ax.axhline(np.log(1 / delta), linestyle="--")
                 if legend:
                     ax.legend()
 
@@ -270,13 +300,7 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
 
 class UnboundedLowerBoundUniversalPortfolioCS(ConfidenceSequence):
     def __init__(
-        self,
-        n,
-        sums0=0,
-        tup=0,
-        betas=(1 / 2, 1 / 2),
-        logweights=None,
-        use_cython=True
+        self, n, sums0=0, tup=0, betas=(1 / 2, 1 / 2), logweights=None, use_cython=True
     ):
         super().__init__()
         self.n = n
@@ -298,7 +322,9 @@ class UnboundedLowerBoundUniversalPortfolioCS(ConfidenceSequence):
         val = log_numer - log_denom
 
         if self.logweights is not None:
-            val += UnboundedUniversalPortfolioCS(betas=self.betas).f(m, self.tup, self.logweights)
+            val += UnboundedUniversalPortfolioCS(betas=self.betas).f(
+                m, self.tup, self.logweights
+            )
 
         return np.nan_to_num(val, nan=np.inf)
 
@@ -306,13 +332,17 @@ class UnboundedLowerBoundUniversalPortfolioCS(ConfidenceSequence):
         raise NotImplementedError
 
     @confidence_interval
-    def construct(self, delta, xs, tol=1e-5, eps=1e-5, verbose=False, log_every=100, **kwargs):
+    def construct(
+        self, delta, xs, tol=1e-5, eps=1e-5, verbose=False, log_every=100, **kwargs
+    ):
         # Note: if eps is too small, then due to numerical instability of the definite integrals,
         #       the behavior may be erratic
         lower_ci = np.zeros_like(xs).astype(float)
         upper_ci = np.ones_like(xs).astype(float)
 
-        sums = np.stack([(xs ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
+        sums = (
+            np.stack([(xs**k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T
+        )  # (T, 2 * n + 1)
 
         telapsed = []
         start = time.time()
@@ -341,7 +371,7 @@ class UnboundedLowerBoundUniversalPortfolioCS(ConfidenceSequence):
                     sums[t - 1],
                     xinits=(xinit_low, mu_hat),
                     tol=tol,
-                    verbose=verbose
+                    verbose=verbose,
                 )
                 if lower_ci[t - 1] == -1 or np.isnan(lower_ci[t - 1]):
                     print("bisect encounters ValueError!")
@@ -354,7 +384,9 @@ class UnboundedLowerBoundUniversalPortfolioCS(ConfidenceSequence):
             fig, ax = plt.subplots(ncols=1, nrows=1)
         ms = np.arange(0.01, 1, 0.01)
 
-        sums = np.stack([(xs ** k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T  # (T, 2 * n + 1)
+        sums = (
+            np.stack([(xs**k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T
+        )  # (T, 2 * n + 1)
 
         fs = []
         for t in range(1, len(xs) + 1):
@@ -363,11 +395,11 @@ class UnboundedLowerBoundUniversalPortfolioCS(ConfidenceSequence):
                 fs = np.zeros_like(ms)
                 for i, m in enumerate(ms):
                     fs[i] = self.f(m, sums[t - 1])
-                if 'label' not in kwargs:
-                    kwargs['label'] = 'LBUP'
-                kwargs['label'] += f' (n={self.n})'
+                if "label" not in kwargs:
+                    kwargs["label"] = "LBUP"
+                kwargs["label"] += f" (n={self.n})"
                 ax.plot(ms, fs, **kwargs)
-                ax.axhline(np.log(1 / delta), linestyle='--')
+                ax.axhline(np.log(1 / delta), linestyle="--")
                 if legend:
                     ax.legend()
 

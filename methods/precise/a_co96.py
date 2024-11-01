@@ -9,12 +9,12 @@ from methods.base import ConfidenceSequence, confidence_interval
 
 def max_logwealth_fan3_lcb(m, mu_hat, var_hat, t):
     if m == 0.0:
-        max_logwealth = (0.5 * (mu_hat ** 2) / (var_hat + mu_hat ** 2)) * t
+        max_logwealth = (0.5 * (mu_hat**2) / (var_hat + mu_hat**2)) * t
     elif m == mu_hat:
         max_logwealth = 0.0
     else:
         A = (mu_hat - m) / m
-        B = (var_hat + (mu_hat - m) ** 2) / m ** 2
+        B = (var_hat + (mu_hat - m) ** 2) / m**2
         lam = A / (A + B)
         max_logwealth = (A * A / (A + B) - (-np.log(1 - lam) - lam) * B) * t
     return max_logwealth
@@ -81,6 +81,7 @@ class PRECiSE_A_CO96(ConfidenceSequence):
     This algorithm is described in  Orabona and Jun, "Tight Concentrations
     and Confidence Sequences from the Regret of Universal Portfolio", ArXiv 2021.
     """
+
     def __init__(self):
         super().__init__()
 
@@ -96,9 +97,9 @@ class PRECiSE_A_CO96(ConfidenceSequence):
         telapsed = []
         start = time.time()
         for t in tqdm(range(len(xs))):
-            data = xs[:t + 1]
+            data = xs[: t + 1]
             me = np.mean(data)
-            va = np.var(data, ddof=1) if t > 0 else 0.
+            va = np.var(data, ddof=1) if t > 0 else 0.0
 
             lcb = np.zeros(n_algo)
             ucb = np.ones(n_algo)
@@ -110,7 +111,10 @@ class PRECiSE_A_CO96(ConfidenceSequence):
 
             lb = 0.0
             ub = me
-            lcbmaxfn = lambda m: max(max_logwealth_fan3_lcb(m, me, va, t + 1), max_logwealth_kl(m, me, va, t + 1))
+            lcbmaxfn = lambda m: max(
+                max_logwealth_fan3_lcb(m, me, va, t + 1),
+                max_logwealth_kl(m, me, va, t + 1),
+            )
             if lb == ub or lcbmaxfn(lb) - rhs <= 0:
                 lcb[i_algo - 1] = 0.0
             else:
@@ -118,7 +122,10 @@ class PRECiSE_A_CO96(ConfidenceSequence):
 
             lb = me
             ub = 1.0
-            ucbmaxfn = lambda m: max(max_logwealth_fan3_ucb(m, me, va, t + 1), max_logwealth_kl(m, me, va, t + 1))
+            ucbmaxfn = lambda m: max(
+                max_logwealth_fan3_ucb(m, me, va, t + 1),
+                max_logwealth_kl(m, me, va, t + 1),
+            )
             if lb == ub or ucbmaxfn(ub) - rhs <= 0:
                 ucb[i_algo - 1] = 1.0
             else:

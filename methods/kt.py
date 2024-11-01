@@ -15,7 +15,11 @@ class CoinBettingCS(ConfidenceSequence):
         super().__init__()
 
     def f(self, x, t):
-        return t * np.log(2) + betaln((t + x + 1) / 2, (t - x + 1) / 2) - betaln(1 / 2, 1 / 2)
+        return (
+            t * np.log(2)
+            + betaln((t + x + 1) / 2, (t - x + 1) / 2)
+            - betaln(1 / 2, 1 / 2)
+        )
 
     def fprime(self, x, t):
         return 1 / 2 * (digamma((t + x + 1) / 2) - digamma((t - x + 1) / 2))
@@ -43,23 +47,42 @@ class TwoHorseRaceCS(ConfidenceSequence):
 
     def f(self, m, t, s, eps=0):
         # negative log bernoulli probability with count s at time step t
-        return - s * np.log(m + eps) - (t - s) * np.log(1 - m + eps) \
-               + betaln(s + self.betas[0], t - s + self.betas[1]) - betaln(*self.betas)
+        return (
+            -s * np.log(m + eps)
+            - (t - s) * np.log(1 - m + eps)
+            + betaln(s + self.betas[0], t - s + self.betas[1])
+            - betaln(*self.betas)
+        )
 
     def fprime(self, m, t, s, eps=0):
         # derivative
-        return - s / (m + eps) + (t - s) / (1 - m + eps)
+        return -s / (m + eps) + (t - s) / (1 - m + eps)
 
     @confidence_interval
-    def construct(self, delta, xs, eps=1e-3, tol=1e-5, verbose=False, batch=False, log_every=100, tqdm_=True, **kwargs):
+    def construct(
+        self,
+        delta,
+        xs,
+        eps=1e-3,
+        tol=1e-5,
+        verbose=False,
+        batch=False,
+        log_every=100,
+        tqdm_=True,
+        **kwargs,
+    ):
         tqdm_ = tqdm if tqdm_ else lambda x: x
         ts = np.arange(1, len(xs) + 1)
         ss = xs.cumsum()
         telapsed = []
 
         if batch:
-            lower_ci = self.find_root(delta, ts, ss, xinit=eps, xmin=0, xmax=1, verbose=verbose)
-            upper_ci = self.find_root(delta, ts, ss, xinit=1 - eps, xmin=0, xmax=1, verbose=verbose)
+            lower_ci = self.find_root(
+                delta, ts, ss, xinit=eps, xmin=0, xmax=1, verbose=verbose
+            )
+            upper_ci = self.find_root(
+                delta, ts, ss, xinit=1 - eps, xmin=0, xmax=1, verbose=verbose
+            )
         else:
             lower_ci = np.zeros_like(xs).astype(float)
             upper_ci = np.ones_like(xs).astype(float)
@@ -77,10 +100,14 @@ class TwoHorseRaceCS(ConfidenceSequence):
                 if self.f(xinit_low, t, ss[t - 1]) < np.log(1 / delta):
                     lower_ci[t - 1] = lower_ci[t - 2]
                 else:
-                    lower_ci[t - 1] = self.find_root_bisect(delta, t, ss[t - 1],
-                                                            xinits=(lower_ci[t - 2], mu_hat),
-                                                            tol=tol,
-                                                            verbose=verbose)
+                    lower_ci[t - 1] = self.find_root_bisect(
+                        delta,
+                        t,
+                        ss[t - 1],
+                        xinits=(lower_ci[t - 2], mu_hat),
+                        tol=tol,
+                        verbose=verbose,
+                    )
                     if lower_ci[t - 1] == -1:
                         print("bisect encounters ValueError!")
                         lower_ci[t - 1] = lower_ci[t - 2]
@@ -89,10 +116,14 @@ class TwoHorseRaceCS(ConfidenceSequence):
                 if self.f(xinit_up, t, ss[t - 1]) < np.log(1 / delta):
                     upper_ci[t - 1] = upper_ci[t - 2]
                 else:
-                    upper_ci[t - 1] = self.find_root_bisect(delta, t, ss[t - 1],
-                                                            xinits=(mu_hat, upper_ci[t - 2]),
-                                                            tol=tol,
-                                                            verbose=verbose)
+                    upper_ci[t - 1] = self.find_root_bisect(
+                        delta,
+                        t,
+                        ss[t - 1],
+                        xinits=(mu_hat, upper_ci[t - 2]),
+                        tol=tol,
+                        verbose=verbose,
+                    )
                     if upper_ci[t - 1] == -1:
                         print("bisect encounters ValueError!")
                         upper_ci[t - 1] = upper_ci[t - 2]
@@ -110,7 +141,9 @@ class TwoHorseRaceCS(ConfidenceSequence):
         ss = xs.cumsum()
 
         mu_hats = ss / ts
-        logqkt = betaln(ss + self.betas[0], ts - ss + self.betas[1]) - betaln(*self.betas)
+        logqkt = betaln(ss + self.betas[0], ts - ss + self.betas[1]) - betaln(
+            *self.betas
+        )
         gs = 1 / ts * (np.log(1 / delta) - logqkt) - binary_entropy(mu_hats)
 
         lower_ci = mu_hats - np.sqrt(gs / 2)
@@ -127,10 +160,10 @@ class TwoHorseRaceCS(ConfidenceSequence):
         for t in tqdm(range(1, len(xs) + 1)):
             if t % every == 0:
                 fs = self.f(mus, t, xs[:t].sum())
-                if 'label' not in kwargs:
-                    kwargs['label'] = 'HR'
+                if "label" not in kwargs:
+                    kwargs["label"] = "HR"
                 ax.plot(mus, fs, **kwargs)
-                ax.axhline(np.log(1 / delta), linestyle='--')
+                ax.axhline(np.log(1 / delta), linestyle="--")
                 if legend:
                     ax.legend()
 
@@ -152,17 +185,25 @@ class CombinedTwoHorseRacesCS:
         ts = np.arange(1, ys.shape[1] + 1)  # (T, )
         if only_last:
             ks = ys.sum(axis=-1).reshape(-1, 1)  # (M, 1)
-            log_wealth = (logsumexp(np.stack([
-                self.fbase(qs[..., j], ts[-1:], ks[j])
-                for j in range(self.M)
-            ], axis=0), axis=0) - np.log(self.M)).reshape(-1)  # (n, )
+            log_wealth = (
+                logsumexp(
+                    np.stack(
+                        [self.fbase(qs[..., j], ts[-1:], ks[j]) for j in range(self.M)],
+                        axis=0,
+                    ),
+                    axis=0,
+                )
+                - np.log(self.M)
+            ).reshape(-1)  # (n, )
             return log_wealth
         else:
             csys = ys.cumsum(axis=-1)  # (M, T)
-            log_wealth = logsumexp(np.stack([
-                self.fbase(qs[..., j], ts, csys[j])
-                for j in range(self.M)
-                ], axis=0), axis=0) - np.log(self.M)  # (n, T)
+            log_wealth = logsumexp(
+                np.stack(
+                    [self.fbase(qs[..., j], ts, csys[j]) for j in range(self.M)], axis=0
+                ),
+                axis=0,
+            ) - np.log(self.M)  # (n, T)
             return log_wealth
 
     def fbase(self, m, t, s, eps=0):
@@ -173,8 +214,12 @@ class CombinedTwoHorseRacesCS:
         t = t.reshape(1, -1)  # (1, T)
         s = s.reshape(1, -1)  # (1, T)
         # negative log bernoulli probability with count s at time step t
-        return - s * np.log(m + eps) - (t - s) * np.log(1 - m + eps) \
-               + betaln(s + self.betas[0], t - s + self.betas[1]) - betaln(*self.betas)  # (n, T)
+        return (
+            -s * np.log(m + eps)
+            - (t - s) * np.log(1 - m + eps)
+            + betaln(s + self.betas[0], t - s + self.betas[1])
+            - betaln(*self.betas)
+        )  # (n, T)
 
 
 class UnboundedHorseRaceCS(TwoHorseRaceCS):
@@ -182,12 +227,16 @@ class UnboundedHorseRaceCS(TwoHorseRaceCS):
         cs = np.maximum.accumulate(xs)
         zs = xs / cs
         log_odd_term = (
-                zs * np.nan_to_num(np.log(np.float64(1.) / (m / cs)), nan=0., posinf=0.) +
-                (1 - zs) * np.nan_to_num(np.log(np.float64(1.) / (1 - np.minimum(m / cs, np.ones_like(xs)))), nan=0., posinf=0.)
+            zs * np.nan_to_num(np.log(np.float64(1.0) / (m / cs)), nan=0.0, posinf=0.0)
+            + (1 - zs)
+            * np.nan_to_num(
+                np.log(np.float64(1.0) / (1 - np.minimum(m / cs, np.ones_like(xs)))),
+                nan=0.0,
+                posinf=0.0,
+            )
         ).sum()
         log_prob = betaln(
-            zs.sum() + self.betas[0],
-            (1 - zs).sum() + self.betas[1]
+            zs.sum() + self.betas[0], (1 - zs).sum() + self.betas[1]
         ) - betaln(*self.betas)
 
         return log_odd_term + log_prob
@@ -196,7 +245,16 @@ class UnboundedHorseRaceCS(TwoHorseRaceCS):
         raise NotImplementedError
 
     @confidence_interval
-    def construct(self, xs, eps=1e-3, tol=1e-5, verbose=False, batch=False, log_every=100, **kwargs):
+    def construct(
+        self,
+        xs,
+        eps=1e-3,
+        tol=1e-5,
+        verbose=False,
+        batch=False,
+        log_every=100,
+        **kwargs,
+    ):
         raise NotImplementedError
 
     def plot(self, delta, xs, upper_bound=1, every=10, ax=None, legend=False, **kwargs):
@@ -209,12 +267,12 @@ class UnboundedHorseRaceCS(TwoHorseRaceCS):
             if t % every == 0:
                 fs = np.array([self.f(m, t, xs[:t]) for m in ms])
                 # fs[fs == np.inf] = 1e3
-                if 'label' not in kwargs:
-                    kwargs['label'] = 'UnbddKT'
+                if "label" not in kwargs:
+                    kwargs["label"] = "UnbddKT"
                 cummax = np.maximum.accumulate(xs[:t])[-1]
                 ax.plot(ms, fs, **kwargs)
-                ax.axhline(np.log(1 / delta), linestyle='--')
-                ax.axvline(cummax, linestyle='--', c='red')
+                ax.axhline(np.log(1 / delta), linestyle="--")
+                ax.axvline(cummax, linestyle="--", c="red")
                 if legend:
                     ax.legend()
 
@@ -227,12 +285,13 @@ class TruncatedHorseRaceCS(TwoHorseRaceCS):
     def f(self, m, ct, t, xs, eps=0):
         zs = np.minimum(xs / ct, np.ones_like(xs))
         log_odd_term = (
-                zs * np.nan_to_num(np.log(np.float64(1.) / m), nan=0., posinf=0.) +
-                (1 - zs) * np.nan_to_num(np.log(np.float64(1.) / (1 - m)), nan=0., posinf=0.)
+            zs * np.nan_to_num(np.log(np.float64(1.0) / m), nan=0.0, posinf=0.0)
+            + (1 - zs)
+            * np.nan_to_num(np.log(np.float64(1.0) / (1 - m)), nan=0.0, posinf=0.0)
         ).sum()
-        log_prob = betaln(zs.sum() + self.betas[0],
-                          (1 - zs).sum() + self.betas[1]) - \
-                   betaln(*self.betas)
+        log_prob = betaln(
+            zs.sum() + self.betas[0], (1 - zs).sum() + self.betas[1]
+        ) - betaln(*self.betas)
 
         return log_odd_term + log_prob
 
@@ -240,7 +299,16 @@ class TruncatedHorseRaceCS(TwoHorseRaceCS):
         raise NotImplementedError
 
     @confidence_interval
-    def construct(self, xs, eps=1e-3, tol=1e-5, verbose=False, batch=False, log_every=100, **kwargs):
+    def construct(
+        self,
+        xs,
+        eps=1e-3,
+        tol=1e-5,
+        verbose=False,
+        batch=False,
+        log_every=100,
+        **kwargs,
+    ):
         raise NotImplementedError
 
     def plot(self, delta, xs, upbd=1, every=10, ax=None, legend=False, **kwargs):
@@ -253,12 +321,12 @@ class TruncatedHorseRaceCS(TwoHorseRaceCS):
             if t % every == 0:
                 fs = np.array([self.f(m, upbd, t, xs[:t]) for m in ms])
                 # fs[fs == np.inf] = 1e3
-                if 'label' not in kwargs:
-                    kwargs['label'] = 'TruncatedKT'
+                if "label" not in kwargs:
+                    kwargs["label"] = "TruncatedKT"
                 cummax = np.maximum.accumulate(xs[:t])[-1]
                 ax.plot(upbd * ms, fs, **kwargs)
-                ax.axhline(np.log(1 / delta), linestyle='--')
-                ax.axvline(cummax, linestyle='--', c='red')
+                ax.axhline(np.log(1 / delta), linestyle="--")
+                ax.axvline(cummax, linestyle="--", c="red")
                 if legend:
                     ax.legend()
 
@@ -270,31 +338,37 @@ class TruncatedHorseRaceCS(TwoHorseRaceCS):
 class MultiHorseRaceCI:
     def __init__(self, M=2, betas=None):
         self.M = M
-        self.betas = .5 * np.ones((self.M,)) if betas is None else np.array(betas)
+        self.betas = 0.5 * np.ones((self.M,)) if betas is None else np.array(betas)
 
     def f(self, qs, ys, eps=0, only_last=False):
         # qs: (n, M)
         # ys: a sequence of M-dim. vectors; (M, T)
         assert qs.shape[-1] == ys.shape[0]
         assert ys.shape[0] == self.M
-        mask = ((qs < 0).sum(axis=-1) + (qs > 1).sum(axis=-1)).astype(bool).astype(float)  # (n, )
-        mask[mask == 1.] = np.inf
+        mask = (
+            ((qs < 0).sum(axis=-1) + (qs > 1).sum(axis=-1)).astype(bool).astype(float)
+        )  # (n, )
+        mask[mask == 1.0] = np.inf
 
         if only_last:
             ks = ys.sum(axis=-1)  # (M, )
             return np.nan_to_num(
-                mask +
-                multibetaln(ks + self.betas) +
-                - multibetaln(self.betas) +
-                - np.einsum('m,nm->n', ks, np.log(qs)),
-                nan=1e3, posinf=1e3, neginf=-1e3,
+                mask
+                + multibetaln(ks + self.betas)
+                + -multibetaln(self.betas)
+                + -np.einsum("m,nm->n", ks, np.log(qs)),
+                nan=1e3,
+                posinf=1e3,
+                neginf=-1e3,
             )  # (n, )
         else:
             csys = ys.cumsum(axis=-1)  # (M, T)
             return np.nan_to_num(
-                mask[:, np.newaxis] +  # (n, 1)
-                multibetaln(csys + self.betas[:, np.newaxis]) +
-                - multibetaln(self.betas) +
-                - np.einsum('mt,nm->nt', csys, np.log(qs)),
-                nan=1e3, posinf=1e3, neginf=-1e3,
+                mask[:, np.newaxis]  # (n, 1)
+                + multibetaln(csys + self.betas[:, np.newaxis])
+                + -multibetaln(self.betas)
+                + -np.einsum("mt,nm->nt", csys, np.log(qs)),
+                nan=1e3,
+                posinf=1e3,
+                neginf=-1e3,
             )  # (n, T)

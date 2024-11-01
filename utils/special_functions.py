@@ -13,6 +13,8 @@ def multibetaln(alphas):
 def multinomln(ns, axis=-1):
     # ns: (n, M) by default
     mask = ((ns < 0).sum(axis=axis)).astype(bool).astype(float)  # (n, )
-    mask[mask == 1.] = -np.inf
+    mask[mask == 1.0] = -np.inf
     # print("ns", ns, "mask", mask)
-    return mask + (gammaln(ns.sum(axis=axis) + 1) - gammaln(ns + 1).sum(axis=axis))  # (n, )
+    return mask + (
+        gammaln(ns.sum(axis=axis) + 1) - gammaln(ns + 1).sum(axis=axis)
+    )  # (n, )

@@ -17,6 +17,7 @@ class PRECiSE_R70(ConfidenceSequence):
     This algorithm is described in  Orabona and Jun, "Tight Concentrations
     and Confidence Sequences from the Regret of Universal Portfolio", ArXiv 2021.
     """
+
     def __init__(self, refine=True):
         super().__init__()
         self.refine = refine
@@ -35,7 +36,7 @@ class PRECiSE_R70(ConfidenceSequence):
         telapsed = []
         start = time.time()
         for t in tqdm(range(len(xs))):
-            mean_c = np.mean(xs[:t + 1])
+            mean_c = np.mean(xs[: t + 1])
 
             # upper confidence interval
             m_ub = m_ub_old
@@ -46,11 +47,15 @@ class PRECiSE_R70(ConfidenceSequence):
 
             # calculate regret
             m_try = m_ub
-            log_W_star = find_max_log_wealth_constrained_lil(xs[:t + 1] - m_try, mn - m_try, mx - m_try)
+            log_W_star = find_max_log_wealth_constrained_lil(
+                xs[: t + 1] - m_try, mn - m_try, mx - m_try
+            )
             if log_W_star >= np.log(1 / delta):
                 while (m_ub - m_lb) > eps:
                     m_try = (m_ub + m_lb) / 2
-                    log_W_star = find_max_log_wealth_constrained_lil(xs[:t + 1] - m_try, mn - m_try, mx - m_try)
+                    log_W_star = find_max_log_wealth_constrained_lil(
+                        xs[: t + 1] - m_try, mn - m_try, mx - m_try
+                    )
                     if log_W_star >= np.log(1 / delta):
                         m_ub = m_try
                     else:
@@ -65,11 +70,15 @@ class PRECiSE_R70(ConfidenceSequence):
 
             # calculate regret
             m_try = m_lb
-            log_W_star = find_max_log_wealth_constrained_lil(xs[:t + 1] - m_try, mn - m_try, mx - m_try)
+            log_W_star = find_max_log_wealth_constrained_lil(
+                xs[: t + 1] - m_try, mn - m_try, mx - m_try
+            )
             if log_W_star >= np.log(1 / delta):
                 while (m_ub - m_lb) > eps:
                     m_try = (m_ub + m_lb) / 2
-                    log_W_star = find_max_log_wealth_constrained_lil(xs[:t + 1] - m_try, mn - m_try, mx - m_try)
+                    log_W_star = find_max_log_wealth_constrained_lil(
+                        xs[: t + 1] - m_try, mn - m_try, mx - m_try
+                    )
                     if log_W_star >= np.log(1 / delta):
                         m_lb = m_try
                     else:
@@ -93,9 +102,14 @@ def find_max_log_wealth_constrained_lil(g, mn, mx):
 
     betstar, fval = newton_1d_bnd(myf, df, df2, -1, 1)
 
-    pdf = lambda bet: np.log(np.log(6.6) + 1) / (2 * np.abs(bet) * (1 + np.log(6.6 / np.abs(bet))) * (np.log(1 + np.log(6.6 / np.abs(bet)))) ** 2)
+    pdf = lambda bet: np.log(np.log(6.6) + 1) / (
+        2
+        * np.abs(bet)
+        * (1 + np.log(6.6 / np.abs(bet)))
+        * (np.log(1 + np.log(6.6 / np.abs(bet)))) ** 2
+    )
 
-    V = np.sum(g ** 2)
+    V = np.sum(g**2)
 
     if betstar > 0:
         s = mn
@@ -108,6 +122,14 @@ def find_max_log_wealth_constrained_lil(g, mn, mx):
     else:
         delta = 0
     delta = absbetstar - max(absbetstar - delta, 0)
-    fval = np.log(max((fval - 1) / (np.finfo(float).eps + np.log(fval)) * abs(betstar), fval * np.exp(-1 / 2 * delta ** 2 / (1 + min(s * betstar, 0)) ** 2 * V) * delta) * pdf(absbetstar + np.finfo(float).eps))
+    fval = np.log(
+        max(
+            (fval - 1) / (np.finfo(float).eps + np.log(fval)) * abs(betstar),
+            fval
+            * np.exp(-1 / 2 * delta**2 / (1 + min(s * betstar, 0)) ** 2 * V)
+            * delta,
+        )
+        * pdf(absbetstar + np.finfo(float).eps)
+    )
 
     return fval

@@ -8,17 +8,25 @@ def confidence_interval(func):
         lower_ci, upper_ci, *_ = func(self, delta, xs, *args, **kwargs)
         lower_ci = np.maximum.accumulate(np.maximum(np.nan_to_num(lower_ci, nan=0), 0))
         upper_ci = np.minimum.accumulate(np.minimum(np.nan_to_num(upper_ci, nan=1), 1))
-        if 'wor' in kwargs and kwargs['wor']:
+        if "wor" in kwargs and kwargs["wor"]:
             # for the "sampling without replacement" scenario
             # see Section 6.2 in (Waudby-Smith and Ramdas, 2021)
             # 'do_not_apply_wor' argument is to avoid applying the WOR transformation twice for HybridUP
-            if 'do_not_apply_wor' not in kwargs or ('do_not_apply_wor' in kwargs and not kwargs['do_not_apply_wor']):
+            if "do_not_apply_wor" not in kwargs or (
+                "do_not_apply_wor" in kwargs and not kwargs["do_not_apply_wor"]
+            ):
                 N = len(xs)
                 ts = np.arange(1, N + 1).reshape(*xs.shape)
                 mu_hats = xs.cumsum(axis=0) / ts
-                mu_hats_shifted = np.array([0.] + list(mu_hats[:-1])).reshape(*xs.shape)
-                lower_ci = (ts - 1) / N * mu_hats_shifted + (1 - (ts - 1) / N) * lower_ci
-                upper_ci = (ts - 1) / N * mu_hats_shifted + (1 - (ts - 1) / N) * upper_ci
+                mu_hats_shifted = np.array([0.0] + list(mu_hats[:-1])).reshape(
+                    *xs.shape
+                )
+                lower_ci = (ts - 1) / N * mu_hats_shifted + (
+                    1 - (ts - 1) / N
+                ) * lower_ci
+                upper_ci = (ts - 1) / N * mu_hats_shifted + (
+                    1 - (ts - 1) / N
+                ) * upper_ci
 
         return lower_ci, upper_ci, *_
 
@@ -49,7 +57,7 @@ class ConfidenceSequence:
         xinit=-1,
         maxiter=100,
         tol=1e-5,
-        verbose=False
+        verbose=False,
     ):
         assert np.all(xmin > -np.inf) and np.all(xmax < np.inf)
 
@@ -67,13 +75,13 @@ class ConfidenceSequence:
             x = xprev - (f(xprev)) / self.fprime(xprev, *args)  # Newton--Raphson update
             x = np.minimum(xmax, np.maximum(xmin, x))
             if verbose:
-                print('xprev, x:', xprev, x)
+                print("xprev, x:", xprev, x)
             cnt += 1
             if (np.abs(x - xprev) < tol).all() or cnt > maxiter:
                 break
 
         if verbose:
-            print('cnt, diff:', cnt, np.abs(x - xprev))
+            print("cnt, diff:", cnt, np.abs(x - xprev))
         return x
 
     def find_root_fsolve(self, delta, *args, xinit):
@@ -83,13 +91,7 @@ class ConfidenceSequence:
         return fsolve(f, x0=xinit)
 
     def find_root_bisect(
-        self,
-        delta,
-        *args,
-        xinits,
-        tol=1e-5,
-        maxiter=16,
-        verbose=False
+        self, delta, *args, xinits, tol=1e-5, maxiter=16, verbose=False
     ):
         def f(x):
             return self.f(x, *args) - np.log(1 / delta)
@@ -129,14 +131,23 @@ class ConfidenceSequence:
             if np.isnan(fmid):
                 fmid = np.inf
             if verbose:
-                print("(xlow, xhi)", (xlow, xhi), "(flow, fmid, fhi)", (flow, fmid, fhi))
+                print(
+                    "(xlow, xhi)", (xlow, xhi), "(flow, fmid, fhi)", (flow, fmid, fhi)
+                )
 
             if compare_signs(flow, fmid):
                 xhi, fhi = xmid, fmid
             elif compare_signs(fmid, fhi):
                 xlow, flow = xmid, fmid
             else:
-                print("xinits", xinits, "(xlow, xhi)", (xlow, xhi), "(flow, fmid, fhi)", (flow, fmid, fhi))
+                print(
+                    "xinits",
+                    xinits,
+                    "(xlow, xhi)",
+                    (xlow, xhi),
+                    "(flow, fmid, fhi)",
+                    (flow, fmid, fhi),
+                )
                 raise ValueError
 
             cnt += 1
@@ -144,7 +155,7 @@ class ConfidenceSequence:
                 break
 
         if verbose:
-            print('cnt, diff:', cnt, np.abs(xhi - xlow))
+            print("cnt, diff:", cnt, np.abs(xhi - xlow))
 
         root = xlow if flow > 0 else xhi
         assert xinits[0] <= root <= xinits[1]

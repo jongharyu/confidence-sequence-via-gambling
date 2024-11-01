@@ -27,6 +27,7 @@ class PRECiSE_CO96(ConfidenceSequence):
     This algorithm is described in  Orabona and Jun, "Tight Concentrations
     and Confidence Sequences from the Regret of Universal Portfolio", ArXiv 2021.
     """
+
     def __init__(self, refine=True):
         super().__init__()
         self.refine = refine
@@ -34,12 +35,14 @@ class PRECiSE_CO96(ConfidenceSequence):
     @confidence_interval
     def construct(self, delta, xs, eps=1e-7, verbose=False, log_every=100, **kwargs):
         def func(b, k, t):
-            return (k * np.log(b + eps) +
-                    (t - k) * np.log(1 - b + eps) +
-                    gammaln(t + 1) +
-                    2 * gammaln(1 / 2) -
-                    gammaln(k + 1 / 2) -
-                    gammaln(t - k + 1 / 2))
+            return (
+                k * np.log(b + eps)
+                + (t - k) * np.log(1 - b + eps)
+                + gammaln(t + 1)
+                + 2 * gammaln(1 / 2)
+                - gammaln(k + 1 / 2)
+                - gammaln(t - k + 1 / 2)
+            )
 
         lower_ci = np.zeros_like(xs).astype(float)
         upper_ci = np.ones_like(xs).astype(float)
@@ -53,7 +56,7 @@ class PRECiSE_CO96(ConfidenceSequence):
             # if t % 100 == 0:
             #     print(t, end=' ')
 
-            mu_hat = xs[:t + 1].mean()
+            mu_hat = xs[: t + 1].mean()
 
             # Upper CI
             m_ub = m_ub_old
@@ -64,10 +67,22 @@ class PRECiSE_CO96(ConfidenceSequence):
             bmax = 1 / m_try
             bmin = -1 / (1 - m_try)
 
-            b_star, log_W_star = find_max_log_wealth_constrained(xs[:t + 1] - m_try, bmin, bmax)
+            b_star, log_W_star = find_max_log_wealth_constrained(
+                xs[: t + 1] - m_try, bmin, bmax
+            )
             b = min((-bmin + b_star) / (bmax - bmin), 1)
-            bound = max(func(np.ceil(b * (t + 1) - 0.5) / (t + 1), np.ceil(b * (t + 1) - 0.5), (t + 1)),
-                        func(np.floor(mu_hat * (t + 1) + 0.5) / t, np.floor(mu_hat * (t + 1) + 0.5), (t + 1)))
+            bound = max(
+                func(
+                    np.ceil(b * (t + 1) - 0.5) / (t + 1),
+                    np.ceil(b * (t + 1) - 0.5),
+                    (t + 1),
+                ),
+                func(
+                    np.floor(mu_hat * (t + 1) + 0.5) / t,
+                    np.floor(mu_hat * (t + 1) + 0.5),
+                    (t + 1),
+                ),
+            )
 
             if log_W_star - bound >= np.log(1 / delta):
                 while (m_ub - m_lb) > 0.0001:
@@ -75,15 +90,25 @@ class PRECiSE_CO96(ConfidenceSequence):
                     bmax = 1 / m_try
                     bmin = -1 / (1 - m_try)
 
-                    b_star, log_W_star = find_max_log_wealth_constrained(xs[:t + 1] - m_try, bmin, bmax)
+                    b_star, log_W_star = find_max_log_wealth_constrained(
+                        xs[: t + 1] - m_try, bmin, bmax
+                    )
                     if log_W_star - bound >= np.log(1 / delta):
                         m_ub = m_try
                         if self.refine:
                             # to have a refinement of the regret
                             b = min((-bmin + b_star) / (bmax - bmin), 1)
                             bound = max(
-                                func(np.ceil(b * (t + 1) - 0.5) / (t + 1), np.ceil(b * (t + 1) - 0.5), (t + 1)),
-                                func(np.floor(mu_hat * (t + 1) + 0.5) / (t + 1), np.floor(mu_hat * (t + 1) + 0.5), (t + 1))
+                                func(
+                                    np.ceil(b * (t + 1) - 0.5) / (t + 1),
+                                    np.ceil(b * (t + 1) - 0.5),
+                                    (t + 1),
+                                ),
+                                func(
+                                    np.floor(mu_hat * (t + 1) + 0.5) / (t + 1),
+                                    np.floor(mu_hat * (t + 1) + 0.5),
+                                    (t + 1),
+                                ),
                             )
                     else:
                         m_lb = m_try
@@ -100,10 +125,22 @@ class PRECiSE_CO96(ConfidenceSequence):
             bmax = 1 / m_try
             bmin = -1 / (1 - m_try)
 
-            b_star, log_W_star = find_max_log_wealth_constrained(xs[:t + 1] - m_try, bmin, bmax)
+            b_star, log_W_star = find_max_log_wealth_constrained(
+                xs[: t + 1] - m_try, bmin, bmax
+            )
             b = min((-bmin + b_star) / (bmax - bmin), 1)
-            bound = max(func(np.ceil(b * (t + 1) - 0.5) / (t + 1), np.ceil(b * (t + 1) - 0.5), (t + 1)),
-                        func(np.floor(mu_hat * (t + 1) + 0.5) / (t + 1), np.floor(mu_hat * (t + 1) + 0.5), (t + 1)))
+            bound = max(
+                func(
+                    np.ceil(b * (t + 1) - 0.5) / (t + 1),
+                    np.ceil(b * (t + 1) - 0.5),
+                    (t + 1),
+                ),
+                func(
+                    np.floor(mu_hat * (t + 1) + 0.5) / (t + 1),
+                    np.floor(mu_hat * (t + 1) + 0.5),
+                    (t + 1),
+                ),
+            )
 
             if log_W_star - bound >= np.log(1 / delta):
                 while (m_ub - m_lb) > 0.0001:
@@ -111,7 +148,9 @@ class PRECiSE_CO96(ConfidenceSequence):
                     bmax = 1 / m_try
                     bmin = -1 / (1 - m_try)
 
-                    b_star, log_W_star = find_max_log_wealth_constrained(xs[:t + 1] - m_try, bmin, bmax)
+                    b_star, log_W_star = find_max_log_wealth_constrained(
+                        xs[: t + 1] - m_try, bmin, bmax
+                    )
                     if log_W_star - bound >= np.log(1 / delta):
                         m_lb = m_try
                         # uncomment next lines to have a refinement of the regret
@@ -119,8 +158,18 @@ class PRECiSE_CO96(ConfidenceSequence):
                         if self.refine:
                             # to have a refinement of the regret
                             b = min((-bmin + b_star) / (bmax - bmin), 1)
-                            bound = max(func(np.ceil(b * (t + 1) - 0.5) / (t + 1), np.ceil(b * (t + 1) - 0.5), (t + 1)),
-                                        func(np.floor(mu_hat * (t + 1) + 0.5) / (t + 1), np.floor(mu_hat * (t + 1) + 0.5), (t + 1)))
+                            bound = max(
+                                func(
+                                    np.ceil(b * (t + 1) - 0.5) / (t + 1),
+                                    np.ceil(b * (t + 1) - 0.5),
+                                    (t + 1),
+                                ),
+                                func(
+                                    np.floor(mu_hat * (t + 1) + 0.5) / (t + 1),
+                                    np.floor(mu_hat * (t + 1) + 0.5),
+                                    (t + 1),
+                                ),
+                            )
 
                     else:
                         m_ub = m_try
