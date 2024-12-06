@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from methods.scalar.base import confidence_interval, ConfidenceSequence
 from methods.scalar.kt import TwoHorseRaceCS
-from methods.scalar.lbup import UnboundedLowerBoundUniversalPortfolioCS
+from methods.scalar.lbup import TruncatedGammaParams
 from methods.scalar.up import UniversalPortfolioCS
 
 
@@ -75,6 +75,7 @@ class UnboundedUniversalPortfolioCS(UniversalPortfolioCS):
         super().__init__()
         self.betas = betas
         self.flip = flip
+        self.logsumprod = 0.0
 
     def f(self, m, t, logweights, eps=0, verbose=False):
         # log(wealth of UP)
@@ -82,6 +83,7 @@ class UnboundedUniversalPortfolioCS(UniversalPortfolioCS):
             print("t, m:", t, m)
         if self.flip:
             m = 1 - m
+        # print(logweights.shape, m.shape)
         return logsumexp(logweights - np.arange(t + 1) * np.log(m + eps))
 
     def fprime(self, m, t, logweights, eps=0):
@@ -95,28 +97,31 @@ class UnboundedUniversalPortfolioCS(UniversalPortfolioCS):
             - log_denom
         )
 
-    # def update_logsumprod(self, logsumprod, x, eps=1e-5):
-    #     logsumprod = logsumexp([np.pad(logsumprod + np.log(x + eps), (1, 0), constant_values=(-np.inf)),
-    #                             np.pad(logsumprod, (0, 1), constant_values=(-np.inf))],
-    #                            axis=0)
-    #     return logsumprod
-
     def update_logsumprod(self, logsumprod, x, eps=1e-5):
-        padded_shape = (len(logsumprod) + 1,)
-        neg_inf_array = -np.inf * np.ones(padded_shape)
+        self.logsumprod = logsumexp(
+            [
+                np.pad(logsumprod + np.log(x + eps), (1, 0), constant_values=(-np.inf)),
+                np.pad(logsumprod, (0, 1), constant_values=(-np.inf)),
+            ],
+            axis=0,
+        )
+        return self.logsumprod
 
-        # Precompute log(x + eps) once
-        log_x_eps = np.log(x + eps)
-
-        # Directly assign values to avoid padding
-        arr1 = neg_inf_array.copy()
-        arr1[1:] = logsumprod + log_x_eps
-        arr2 = neg_inf_array.copy()
-        arr2[:-1] = logsumprod
-
-        logsumprod = logsumexp([arr1, arr2], axis=0)
-
-        return logsumprod
+    # def update_logsumprod(self, logsumprod, x, eps=1e-5):
+    #     padded_shape = (len(logsumprod) + 1,)
+    #     neg_inf_array = -np.inf * np.ones(padded_shape)
+    #
+    #     # Precompute log(x + eps) once
+    #     log_x_eps = np.log(x + eps)
+    #
+    #     # Directly assign values to avoid padding
+    #     arr1 = neg_inf_array.copy()
+    #     arr1[1:] = logsumprod + log_x_eps
+    #     arr2 = neg_inf_array.copy()
+    #     arr2[:-1] = logsumprod
+    #
+    #     self.logsumprod = logsumprod = logsumexp([arr1, arr2], axis=0)
+    #     return logsumprod
 
     def compute_logweights(self, t, logsumprod):
         return logsumprod + (
@@ -188,6 +193,138 @@ class UnboundedUniversalPortfolioCS(UniversalPortfolioCS):
         return lower_ci, upper_ci, telapsed, logweights
 
 
+class UnboundedLowerBoundUniversalPortfolioCS(ConfidenceSequence):
+    def __init__(
+        self, n, sums0=0, tup=0, betas=(1 / 2, 1 / 2), logweights=None, use_cython=True
+    ):
+        super().__init__()
+        self.n = n
+        self.use_cython = use_cython
+        self.tg_params = TruncatedGammaParams(self.n, self.use_cython)
+
+        # for rhos and eta for a prior
+        self.sums0 = sums0 if not isinstance(sums0, int) else np.zeros(2 * self.n + 1)
+        self.sums = np.zeros(2 * self.n + 1)
+
+        # for piggybacking UP (these are used in HybridUP)
+        self.tup = tup
+        self.betas = betas
+        self.logweights = logweights
+
+    def update_sums(self, x):
+        # x: scalar
+        self.sums = np.array([self.sums[j] + x**j for j in range(len(self.sums))])
+
+    def f_sequential(self, m):
+        # f(m, st, sst) = log(Zt / Z0)
+        log_numer = self.tg_params.compute_log_z(m, self.sums + self.sums0)
+        log_denom = self.tg_params.compute_log_z(m, self.sums0)
+        val = log_numer - log_denom
+
+        if self.logweights is not None:
+            val += UnboundedUniversalPortfolioCS(betas=self.betas).f(
+                m, self.tup, self.logweights
+            )
+
+        return np.nan_to_num(val, nan=np.inf)
+
+    def f(self, m, sums, verbose=False):
+        # f(m, st, sst) = log(Zt / Z0)
+        log_numer = self.tg_params.compute_log_z(m, sums + self.sums0)
+        log_denom = self.tg_params.compute_log_z(m, self.sums0)
+        # print(
+        #     f"DEBUGGING LBUP, m={m}, sums={sums}, log_numer={log_numer}, log_denom={log_denom}"
+        # )
+        val = log_numer - log_denom
+
+        if self.logweights is not None:
+            val += UnboundedUniversalPortfolioCS(betas=self.betas).f(
+                m, self.tup, self.logweights
+            )
+
+        return np.nan_to_num(val, nan=np.inf)
+
+    def fprime(self, x, *args):
+        raise NotImplementedError
+
+    @confidence_interval
+    def construct(
+        self, delta, xs, tol=1e-5, eps=1e-5, verbose=False, log_every=100, only_last=False, **kwargs
+    ):
+        # Note: if eps is too small, then due to numerical instability of the definite integrals,
+        #       the behavior may be erratic
+        lower_ci = np.zeros_like(xs).astype(float)
+        upper_ci = np.ones_like(xs).astype(float)
+
+        sums = (
+            np.stack([(xs**k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T
+        )  # (T, 2 * n + 1)
+
+        telapsed = []
+        start = time.time()
+        for t in tqdm(range(1, len(xs) + 1)):
+            mu_hat = (sums[t - 1, 1] + self.sums0[1]) / (sums[t - 1, 0] + self.sums0[0])
+
+            # use scipy's fsolve (somehow doesn't work properly)
+            # lower_ci[t - 1] = self.find_root_fsolve(
+            #     sums[t - 1],
+            #     sums_c[t - 1],
+            #     xinit=(lower_ci[t - 2] + mu_hat) / 2
+            # )
+            # upper_ci[t - 1] = self.find_root_fsolve(
+            #     sums[t - 1],
+            #     sums_c[t - 1],
+            #     xinit=(upper_ci[t - 2] + mu_hat) / 2
+            # )
+
+            # use scipy's bisect with a customized initialization rule
+            xinit_low = lower_ci[t - 2] if t > 1 else eps
+            if only_last and t < len(xs):
+                lower_ci[t - 1] = lower_ci[t - 2]
+            else:
+                if self.f(xinit_low, sums[t - 1]) < np.log(1 / delta):
+                    lower_ci[t - 1] = xinit_low
+                else:
+                    lower_ci[t - 1] = self.find_root_bisect(
+                        delta,
+                        sums[t - 1],
+                        xinits=(xinit_low, mu_hat),
+                        tol=tol,
+                        verbose=verbose,
+                    )
+                    if lower_ci[t - 1] == -1 or np.isnan(lower_ci[t - 1]):
+                        print("bisect encounters ValueError!")
+                        lower_ci[t - 1] = lower_ci[t - 2]
+                pass
+        return lower_ci, upper_ci, telapsed
+
+    def plot(self, delta, xs, every=10, ax=None, legend=False, **kwargs):
+        if ax is None:
+            fig, ax = plt.subplots(ncols=1, nrows=1)
+        ms = np.arange(0.001, 1, 0.001)
+
+        sums = (
+            np.stack([(xs**k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T
+        )  # (T, 2 * n + 1)
+
+        fs = []
+        for t in range(1, len(xs) + 1):
+            if (t + self.tup) % every == 0:
+                print(t + self.tup)
+                fs = np.zeros_like(ms)
+                for i, m in enumerate(ms):
+                    fs[i] = self.f(m, sums[t - 1])
+                if "label" not in kwargs:
+                    kwargs["label"] = "LBUP"
+                kwargs["label"] += f" (n={self.n})"
+                ax.plot(ms, fs, **kwargs)
+                ax.axhline(np.log(1 / delta), linestyle="--")
+                if legend:
+                    ax.legend()
+
+        return fs
+
+
 class UnboundedHybridUniversalPortfolioCS(ConfidenceSequence):
     def __init__(self, n=1, tup=50, betas=(1 / 2, 1 / 2)):
         super().__init__()
@@ -204,9 +341,7 @@ class UnboundedHybridUniversalPortfolioCS(ConfidenceSequence):
 
         # Run UnboundedUP up until self.tup round
         lower_ci[: self.tup], _, telapsed_up, logweights = (
-            UnboundedUniversalPortfolioCS(
-                betas=self.betas
-            ).construct(
+            UnboundedUniversalPortfolioCS(betas=self.betas).construct(
                 delta,
                 xs[: self.tup],
                 eps=eps,

@@ -56,7 +56,7 @@ class CombinedTwoHorseRacesCS:
         )  # (n, T)
 
 
-class MultiHorseRaceCI:
+class MultiHorseRaceCS:
     def __init__(self, M=2, betas=None):
         self.M = M
         self.betas = 0.5 * np.ones((self.M,)) if betas is None else np.array(betas)

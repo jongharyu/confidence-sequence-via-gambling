@@ -69,6 +69,7 @@ class TwoHorseRaceCS(ConfidenceSequence):
         batch=False,
         log_every=100,
         tqdm_=True,
+        conservative=False,
         **kwargs,
     ):
         tqdm_ = tqdm if tqdm_ else lambda x: x
@@ -100,11 +101,12 @@ class TwoHorseRaceCS(ConfidenceSequence):
                 if self.f(xinit_low, t, ss[t - 1]) < np.log(1 / delta):
                     lower_ci[t - 1] = lower_ci[t - 2]
                 else:
+                    # print("DEBUGGING!", lower_ci[t-2], mu_hat)
                     lower_ci[t - 1] = self.find_root_bisect(
                         delta,
                         t,
                         ss[t - 1],
-                        xinits=(lower_ci[t - 2], mu_hat),
+                        xinits=(lower_ci[t - 2] if not conservative else eps, mu_hat),
                         tol=tol,
                         verbose=verbose,
                     )
@@ -120,7 +122,7 @@ class TwoHorseRaceCS(ConfidenceSequence):
                         delta,
                         t,
                         ss[t - 1],
-                        xinits=(mu_hat, upper_ci[t - 2]),
+                        xinits=(mu_hat, upper_ci[t - 2] if not conservative else 1 - eps),
                         tol=tol,
                         verbose=verbose,
                     )
@@ -154,7 +156,7 @@ class TwoHorseRaceCS(ConfidenceSequence):
     def plot(self, delta, xs, every=10, ax=None, legend=False, **kwargs):
         if ax is None:
             fig, ax = plt.subplots(ncols=1, nrows=1)
-        mus = np.arange(0.01, 1, 0.01)
+        mus = np.arange(0.001, 1, 0.001)
 
         fs = []
         for t in tqdm(range(1, len(xs) + 1)):

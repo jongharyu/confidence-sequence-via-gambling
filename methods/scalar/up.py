@@ -171,7 +171,7 @@ class UniversalPortfolioCS(ConfidenceSequence):
         xs = np.atleast_1d(xs.squeeze())
         if ax is None:
             fig, ax = plt.subplots(ncols=1, nrows=1)
-        ms = np.arange(0.01, 1, 0.01)
+        ms = np.arange(0.001, 1, 0.001)
 
         fs = []
         fps = []

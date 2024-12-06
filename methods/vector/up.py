@@ -4,56 +4,7 @@ import numpy as np
 from scipy.special import logsumexp
 
 from methods.scalar.base import ConfidenceSequence
-from methods.scalar.up import UniversalPortfolioCS
 from utils.special_functions import multibetaln
-
-
-# Two-stock universal portfolio combined via average of wealths for multidim case
-class CombinedUniversalPortfolioCS:
-    def __init__(self, M=2, betas=(1 / 2, 1 / 2)):
-        self.M = M
-        self.logsumprods = [np.array([0.0]) for _ in range(self.M)]
-        self.logweights = [0.0 for _ in range(self.M)]
-        self.ups = [UniversalPortfolioCS(betas=betas) for _ in range(self.M)]
-
-    def f(self, m, t, eps=0, verbose=False):
-        # m: (n, M)
-        log_wealth = logsumexp(
-            np.stack(
-                [
-                    self.fbase(m[:, i], t, self.logweights[i], eps)
-                    for i in range(self.M)
-                ],
-                axis=0,
-            ),
-            axis=0,
-        ) - np.log(self.M)
-        return log_wealth
-
-    def update_logsumprods(self, t, yv):
-        for i in range(self.M):
-            self.logsumprods[i] = self.ups[i].update_logsumprod(
-                self.logsumprods[i], yv[i]
-            )
-            self.logweights[i] = self.ups[i].compute_logweights(t, self.logsumprods[i])
-
-    def fbase(self, m, t, logweights, eps=0, verbose=False):
-        """
-        m: (n, )
-        t: int
-        logweights: (l, )
-        """
-        # log(wealth of Cover's UP)
-        if verbose:
-            print("t, m:", t, m)
-        m = m.reshape(-1, 1)  # (n, 1)
-        logweights = logweights.reshape(1, -1)  # (1, l)
-        return logsumexp(
-            logweights
-            - np.arange(t + 1) * np.log(m + eps)
-            - (t - np.arange(t + 1)) * np.log(1 - m + eps),
-            axis=-1,
-        )  # (n, )
 
 
 class MultivariateUniversalPortfolioCS(ConfidenceSequence):
@@ -88,7 +39,7 @@ class MultivariateUniversalPortfolioCS(ConfidenceSequence):
         # note: unlike in k=2 case, logsumprod is given here
         # note:
         #   logweights[kv] = multibetaln(kv + self.betas) - multibetaln(self.betas) + logsumprod[kv]
-        # m: (n, M)
+        # m: (n_grid, M)
         return logsumexp(
             np.stack(
                 [
@@ -101,7 +52,7 @@ class MultivariateUniversalPortfolioCS(ConfidenceSequence):
                 axis=-1,
             ),
             axis=-1,
-        )  # (n, )
+        )  # (n_grid, )
 
     def update_logsumprod(self, yv):
         self.logsumprod = self._update_logsumprod(yv, self.logsumprod)

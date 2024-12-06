@@ -1,6 +1,5 @@
 import time
 
-import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 import scipy.integrate as integrate
@@ -11,11 +10,35 @@ from tqdm import tqdm
 import methods.lbup_integrand as lbup_integrand
 from methods.scalar.base import ConfidenceSequence, confidence_interval
 from methods.scalar.up import UniversalPortfolioCS
-from methods.scalar.onesided import UnboundedUniversalPortfolioCS
 
 
 def logbinom(n, k):
     return np.log(binom(n, k))
+
+
+def stable_expsub(a, b):
+    # Convert inputs to numpy arrays if they are not already
+    a = np.asarray(a)
+    b = np.asarray(b)
+
+    # Create an output array to handle the cases
+    result = np.zeros_like(a)
+
+    # Case when a == b
+    mask_equal = a == b
+    result[mask_equal] = 0.0
+
+    # Case when a > b
+    mask_greater = a > b
+    result[mask_greater] = np.exp(b[mask_greater]) * np.expm1(
+        a[mask_greater] - b[mask_greater]
+    )
+
+    # Case when a < b
+    mask_less = a < b
+    result[mask_less] = -np.exp(a[mask_less]) * np.expm1(b[mask_less] - a[mask_less])
+
+    return result
 
 
 class TruncatedGamma:
@@ -77,20 +100,29 @@ class TruncatedGammaParams:
         self.use_cython = use_cython
 
     @staticmethod
-    def g(m, k, sums):
+    def g(m, k, sums, eps=1e-5):
         log_even = logsumexp(
-            [
-                logbinom(k, j) + np.log(sums[j]) - j * np.log(m)
-                for j in range(0, k + 1, 2)
-            ]
+            np.stack(
+                [
+                    logbinom(k, j) + np.log(sums[j]) - j * np.log(m + eps)
+                    for j in range(0, k + 1, 2)
+                ],
+                axis=0,
+            ),
+            axis=0,
         )
         log_odd = logsumexp(
-            [
-                logbinom(k, j) + np.log(sums[j]) - j * np.log(m)
-                for j in range(1, k + 1, 2)
-            ]
+            np.stack(
+                [
+                    logbinom(k, j) + np.log(sums[j]) - j * np.log(m + eps)
+                    for j in range(1, k + 1, 2)
+                ],
+                axis=0,
+            ),
+            axis=0,
         )
-        return np.exp(log_even) - np.exp(log_odd)
+        print(f"Debugging g: m={m}, log_even={log_even}, log_odd={log_odd}")
+        return stable_expsub(log_even, log_odd)  # np.exp(log_even) - np.exp(log_odd)
 
     #         return np.sum([binom(k, j) * sums[j] / ((-m) ** j) for j in range(k + 1)])
 
@@ -102,8 +134,19 @@ class TruncatedGammaParams:
 
     def compute_log_z(self, m, sums):
         rhos, eta = self.compute_params(m, sums)
-        base_log_z = TruncatedGamma(rhos, eta, use_cython=self.use_cython).log_z
-        #         print("Debugging", (np.log(1 - m), base_log_z))
+        print(
+            f"Debugging TruncatedGammaParams1 m={m}, sums={sums}, rhos={rhos}, eta={eta}"
+        )
+        if isinstance(m, float):
+            base_log_z = TruncatedGamma(rhos, eta, use_cython=self.use_cython).log_z
+        else:
+            base_log_z = np.array(
+                [
+                    TruncatedGamma(rhos[:, i], eta[i], use_cython=self.use_cython).log_z
+                    for i in range(len(m))
+                ]
+            )
+        print(f"Debugging TruncatedGammaParams2 base_log_z={base_log_z}")
         return np.log(1 - m) + base_log_z
 
 
@@ -300,114 +343,6 @@ class LowerBoundUniversalPortfolioCS(ConfidenceSequence):
         return fs
 
 
-class UnboundedLowerBoundUniversalPortfolioCS(ConfidenceSequence):
-    def __init__(
-        self, n, sums0=0, tup=0, betas=(1 / 2, 1 / 2), logweights=None, use_cython=True
-    ):
-        super().__init__()
-        self.n = n
-        self.use_cython = use_cython
-        self.tg_params = TruncatedGammaParams(self.n, self.use_cython)
-
-        # for rhos and eta for a prior
-        self.sums0 = sums0 if not isinstance(sums0, int) else np.zeros(2 * self.n + 1)
-
-        # for piggybacking UP (these are used in HybridUP)
-        self.tup = tup
-        self.betas = betas
-        self.logweights = logweights
-
-    def f(self, m, sums, verbose=False):
-        # f(m, st, sst) = log(Zt / Z0)
-        log_numer = self.tg_params.compute_log_z(m, sums + self.sums0)
-        log_denom = self.tg_params.compute_log_z(m, self.sums0)
-        val = log_numer - log_denom
-
-        if self.logweights is not None:
-            val += UnboundedUniversalPortfolioCS(betas=self.betas).f(
-                m, self.tup, self.logweights
-            )
-
-        return np.nan_to_num(val, nan=np.inf)
-
-    def fprime(self, x, *args):
-        raise NotImplementedError
-
-    @confidence_interval
-    def construct(
-        self, delta, xs, tol=1e-5, eps=1e-5, verbose=False, log_every=100, **kwargs
-    ):
-        # Note: if eps is too small, then due to numerical instability of the definite integrals,
-        #       the behavior may be erratic
-        lower_ci = np.zeros_like(xs).astype(float)
-        upper_ci = np.ones_like(xs).astype(float)
-
-        sums = (
-            np.stack([(xs**k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T
-        )  # (T, 2 * n + 1)
-
-        telapsed = []
-        start = time.time()
-        for t in tqdm(range(1, len(xs) + 1)):
-            mu_hat = (sums[t - 1, 1] + self.sums0[1]) / (sums[t - 1, 0] + self.sums0[0])
-
-            # use scipy's fsolve (somehow doesn't work properly)
-            # lower_ci[t - 1] = self.find_root_fsolve(
-            #     sums[t - 1],
-            #     sums_c[t - 1],
-            #     xinit=(lower_ci[t - 2] + mu_hat) / 2
-            # )
-            # upper_ci[t - 1] = self.find_root_fsolve(
-            #     sums[t - 1],
-            #     sums_c[t - 1],
-            #     xinit=(upper_ci[t - 2] + mu_hat) / 2
-            # )
-
-            # use scipy's bisect with a customized initialization rule
-            xinit_low = lower_ci[t - 2] if t > 1 else eps
-            if self.f(xinit_low, sums[t - 1]) < np.log(1 / delta):
-                lower_ci[t - 1] = xinit_low
-            else:
-                lower_ci[t - 1] = self.find_root_bisect(
-                    delta,
-                    sums[t - 1],
-                    xinits=(xinit_low, mu_hat),
-                    tol=tol,
-                    verbose=verbose,
-                )
-                if lower_ci[t - 1] == -1 or np.isnan(lower_ci[t - 1]):
-                    print("bisect encounters ValueError!")
-                    lower_ci[t - 1] = lower_ci[t - 2]
-
-        return lower_ci, upper_ci, telapsed
-
-    def plot(self, delta, xs, every=10, ax=None, legend=False, **kwargs):
-        if ax is None:
-            fig, ax = plt.subplots(ncols=1, nrows=1)
-        ms = np.arange(0.01, 1, 0.01)
-
-        sums = (
-            np.stack([(xs**k) for k in range(2 * self.n + 1)]).cumsum(axis=1).T
-        )  # (T, 2 * n + 1)
-
-        fs = []
-        for t in range(1, len(xs) + 1):
-            if (t + self.tup) % every == 0:
-                print(t + self.tup)
-                fs = np.zeros_like(ms)
-                for i, m in enumerate(ms):
-                    fs[i] = self.f(m, sums[t - 1])
-                if "label" not in kwargs:
-                    kwargs["label"] = "LBUP"
-                kwargs["label"] += f" (n={self.n})"
-                ax.plot(ms, fs, **kwargs)
-                ax.axhline(np.log(1 / delta), linestyle="--")
-                if legend:
-                    ax.legend()
-
-        return fs
-
-
 class HybridUniversalPortfolioCS(ConfidenceSequence):
     def __init__(self, n=1, tup=50, betas=(1 / 2, 1 / 2)):
         super().__init__()
@@ -424,9 +359,7 @@ class HybridUniversalPortfolioCS(ConfidenceSequence):
 
         # Run UP up until self.tup round
         lower_ci[: self.tup], upper_ci[: self.tup], telapsed_up, logweights = (
-            UniversalPortfolioCS(
-                betas=self.betas
-            ).construct(
+            UniversalPortfolioCS(betas=self.betas).construct(
                 delta,
                 xs[: self.tup],
                 eps=eps,
